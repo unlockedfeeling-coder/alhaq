@@ -9,8 +9,6 @@ export default function Registration({ userRole, userEmail }) {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [pendingPatients, setPendingPatients] = useState([])
-  
-  // NEW: History State
   const [regHistory, setRegHistory] = useState([])
 
   const [returningId, setReturningId] = useState('')
@@ -22,7 +20,6 @@ export default function Registration({ userRole, userEmail }) {
     fetchRegHistory()
   }, [])
 
-  // NEW: Fetch Registration Fee History
   const fetchRegHistory = async () => {
     const { data, error } = await supabase
       .from('receipts')
@@ -31,9 +28,7 @@ export default function Registration({ userRole, userEmail }) {
       .order('created_at', { ascending: false })
       .limit(100)
     
-    if (!error && data) {
-      setRegHistory(data)
-    }
+    if (!error && data) setRegHistory(data)
   }
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value })
@@ -57,15 +52,37 @@ export default function Registration({ userRole, userEmail }) {
     setLoading(false)
   }
 
+  // HELPER FUNCTION: Safely generate the next ID
+  const getNextPatientId = async () => {
+    // 1. Fetch the most recent patient to find the highest ID number
+    const { data: lastPatient } = await supabase
+      .from('patients')
+      .select('patient_id')
+      .not('patient_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    let nextNumber = 1;
+    if (lastPatient && lastPatient.patient_id) {
+      // Extract the number from the end of the ID (e.g., "AH-2026-005" -> 5)
+      const parts = lastPatient.patient_id.split('-');
+      const lastNum = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(lastNum)) {
+        nextNumber = lastNum + 1;
+      }
+    }
+    return `AH-2026-${String(nextNumber).padStart(3, '0')}`;
+  }
+
   const handleRegisterAndPay = async (e) => {
     e.preventDefault()
     setLoading(true)
     setMessage('')
 
     try {
-      // 1. Generate new Patient ID
-      const { count } = await supabase.from('patients').select('*', { count: 'exact', head: true }).eq('registration_paid', true)
-      const newId = `AH-2026-${String((count || 0) + 1).padStart(3, '0')}`
+      // 1. Generate new Patient ID safely
+      const newId = await getNextPatientId();
 
       // 2. Insert patient as PAID immediately
       const { data: patientData, error: patientError } = await supabase.from('patients').insert([{
@@ -85,7 +102,7 @@ export default function Registration({ userRole, userEmail }) {
 
       if (patientError) throw patientError
 
-      // 3. Create Receipt Record (Uses the logged-in staff's email/name for accountability)
+      // 3. Create Receipt Record
       const receiptNum = `REG-${Date.now().toString().slice(-6)}`
       await supabase.from('receipts').insert([{
         receipt_number: receiptNum,
@@ -93,15 +110,14 @@ export default function Registration({ userRole, userEmail }) {
         patient_name: `${formData.first_name} ${formData.last_name}`,
         total_amount: 20,
         payment_method: formData.payment_method,
-        cashier_name: userEmail || 'Reception Desk', // Tracks exactly who did it
+        cashier_name: userEmail || 'Reception Desk',
         description: 'Patient Registration / Folder Fee',
         created_at: new Date().toISOString()
       }])
 
-      setMessage(`🎉 Registration Complete & Paid! New Patient ID: ${newId}`)
+      setMessage(` Registration Complete & Paid! New Patient ID: ${newId}`)
       setFormData({ first_name: '', last_name: '', date_of_birth: '', gender: 'Male', phone: '', address: '', blood_type: 'O+', allergies: '', payment_method: 'Cash' })
       
-      // Refresh history and pending lists
       fetchRegHistory()
       fetchPending()
       
@@ -124,8 +140,7 @@ export default function Registration({ userRole, userEmail }) {
   const handleGenerateID = async (patientId) => {
     setLoading(true)
     try {
-      const { count } = await supabase.from('patients').select('*', { count: 'exact', head: true }).eq('registration_paid', true)
-      const newId = `AH-2026-${String((count || 0) + 1).padStart(3, '0')}`
+      const newId = await getNextPatientId();
 
       const { error } = await supabase.from('patients').update({ 
         patient_id: newId, 
@@ -149,14 +164,13 @@ export default function Registration({ userRole, userEmail }) {
   const thStyle = { padding: '12px', color: '#666', fontWeight: 'bold', borderBottom: '2px solid #e5e7eb', textAlign: 'left' }
   const tdStyle = { padding: '12px', color: '#333', borderBottom: '1px solid #f3f4f6' }
 
-  // Filter history: Admin sees ALL, Receptionist sees ONLY their own transactions
   const visibleHistory = userRole === 'admin' 
     ? regHistory 
     : regHistory.filter(r => r.cashier_name === userEmail)
 
   return (
     <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
-      <h2 style={{ color: '#333', marginBottom: '20px', borderBottom: '2px solid #16a34a', paddingBottom: '10px' }}>📝 Patient Registration</h2>
+      <h2 style={{ color: '#333', marginBottom: '20px', borderBottom: '2px solid #16a34a', paddingBottom: '10px' }}> Patient Registration</h2>
 
       {message && (
         <div style={{ 
@@ -221,7 +235,7 @@ export default function Registration({ userRole, userEmail }) {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Payment Method for Folder Fee *</label>
               <select name="payment_method" value={formData.payment_method} onChange={handleChange} style={inputStyle}>
-                <option value="Cash">💵 Cash</option>
+                <option value="Cash"> Cash</option>
                 <option value="Mobile Money">📱 Mobile Money</option>
                 <option value="Card">💳 Card</option>
               </select>
@@ -229,13 +243,13 @@ export default function Registration({ userRole, userEmail }) {
           </div>
 
           <button type="submit" disabled={loading} style={{ width: '100%', padding: '15px', backgroundColor: loading ? '#9ca3af' : '#16a34a', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' }}>
-            {loading ? 'Processing...' : '✅ Register Patient & Collect GH₵ 20'}
+            {loading ? 'Processing...' : '✅ Register Patient & Collect GH 20'}
           </button>
         </form>
       </div>
 
-      {/* NEW: REGISTRATION FEE HISTORY TABLE */}
-      <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
+      {/* REGISTRATION FEE HISTORY TABLE */}
+      <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', marginBottom: '30px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #16a34a', paddingBottom: '10px' }}>
           <h3 style={{ margin: 0, color: '#333' }}>
             📜 Registration Fee History 
@@ -284,6 +298,36 @@ export default function Registration({ userRole, userEmail }) {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+      </div>
+
+      {/* MANUAL OVERRIDE QUEUE */}
+      <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '2px solid #f59e0b', paddingBottom: '10px' }}>
+          <h3 style={{ margin: 0, color: '#333' }}>⚠️ Manual Registration (External Payments)</h3>
+          <button onClick={fetchPending} style={{ padding: '8px 15px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+             Refresh Queue
+          </button>
+        </div>
+        
+        {pendingPatients.length === 0 ? <p style={{color: '#666'}}>No manual registrations pending.</p> : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {pendingPatients.map((p) => (
+              <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px' }}>
+                <div>
+                  <div style={{ fontWeight: 'bold', fontSize: '16px' }}>{p.first_name} {p.last_name}</div>
+                  <div style={{ fontSize: '13px', color: '#666' }}>Temp Ref: {p.temp_reference} • Phone: {p.phone}</div>
+                </div>
+                <button 
+                  onClick={() => handleGenerateID(p.id)} 
+                  disabled={loading}
+                  style={{ padding: '10px 20px', backgroundColor: '#16a34a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+                >
+                  {loading ? 'Generating...' : '✅ Payment Confirmed - Generate ID'}
+                </button>
+              </div>
+            ))}
           </div>
         )}
       </div>
