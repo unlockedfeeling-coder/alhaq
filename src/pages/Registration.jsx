@@ -52,9 +52,8 @@ export default function Registration({ userRole, userEmail }) {
     setLoading(false)
   }
 
-  // HELPER FUNCTION: Safely generate the next ID
+  // SAFE ID GENERATOR: Looks at the LAST patient, not the count
   const getNextPatientId = async () => {
-    // 1. Fetch the most recent patient to find the highest ID number
     const { data: lastPatient } = await supabase
       .from('patients')
       .select('patient_id')
@@ -65,7 +64,6 @@ export default function Registration({ userRole, userEmail }) {
 
     let nextNumber = 1;
     if (lastPatient && lastPatient.patient_id) {
-      // Extract the number from the end of the ID (e.g., "AH-2026-005" -> 5)
       const parts = lastPatient.patient_id.split('-');
       const lastNum = parseInt(parts[parts.length - 1], 10);
       if (!isNaN(lastNum)) {
@@ -81,10 +79,8 @@ export default function Registration({ userRole, userEmail }) {
     setMessage('')
 
     try {
-      // 1. Generate new Patient ID safely
       const newId = await getNextPatientId();
 
-      // 2. Insert patient as PAID immediately
       const { data: patientData, error: patientError } = await supabase.from('patients').insert([{
         first_name: formData.first_name,
         last_name: formData.last_name,
@@ -102,7 +98,6 @@ export default function Registration({ userRole, userEmail }) {
 
       if (patientError) throw patientError
 
-      // 3. Create Receipt Record
       const receiptNum = `REG-${Date.now().toString().slice(-6)}`
       await supabase.from('receipts').insert([{
         receipt_number: receiptNum,
@@ -115,7 +110,7 @@ export default function Registration({ userRole, userEmail }) {
         created_at: new Date().toISOString()
       }])
 
-      setMessage(` Registration Complete & Paid! New Patient ID: ${newId}`)
+      setMessage(`🎉 Registration Complete & Paid! New Patient ID: ${newId}`)
       setFormData({ first_name: '', last_name: '', date_of_birth: '', gender: 'Male', phone: '', address: '', blood_type: 'O+', allergies: '', payment_method: 'Cash' })
       
       fetchRegHistory()
@@ -170,11 +165,11 @@ export default function Registration({ userRole, userEmail }) {
 
   return (
     <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
-      <h2 style={{ color: '#333', marginBottom: '20px', borderBottom: '2px solid #16a34a', paddingBottom: '10px' }}> Patient Registration</h2>
+      <h2 style={{ color: '#333', marginBottom: '20px', borderBottom: '2px solid #16a34a', paddingBottom: '10px' }}>📝 Patient Registration</h2>
 
       {message && (
         <div style={{ 
-          backgroundColor: message.includes('✅') || message.includes('🎉') ? '#dcfce7' : '#fee2e2', 
+          backgroundColor: message.includes('✅') || message.includes('') ? '#dcfce7' : '#fee2e2', 
           color: message.includes('✅') || message.includes('🎉') ? '#166534' : '#991b1b', 
           padding: '15px', borderRadius: '8px', marginBottom: '20px', fontWeight: 'bold' 
         }}>
@@ -182,7 +177,6 @@ export default function Registration({ userRole, userEmail }) {
         </div>
       )}
 
-      {/* RETURNING PATIENT SEARCH */}
       <div style={{ backgroundColor: 'white', padding: '25px', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', marginBottom: '30px', border: '1px solid #e5e7eb' }}>
         <h3 style={{ margin: '0 0 15px 0', color: '#3b82f6' }}>🔄 Returning Patient?</h3>
         <form onSubmit={handleReturningSearch} style={{ display: 'flex', gap: '10px' }}>
@@ -193,7 +187,7 @@ export default function Registration({ userRole, userEmail }) {
             style={{ ...inputStyle, marginBottom: 0, flex: 1 }} 
           />
           <button type="submit" disabled={loading} style={{ padding: '12px 25px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
-            {loading ? 'Searching...' : '🔍 Verify ID'}
+            {loading ? 'Searching...' : ' Verify ID'}
           </button>
         </form>
         {returningError && <div style={{ marginTop: '15px', color: '#dc2626', fontWeight: 'bold' }}>{returningError}</div>}
@@ -204,7 +198,6 @@ export default function Registration({ userRole, userEmail }) {
         )}
       </div>
 
-      {/* NEW PATIENT REGISTRATION FORM */}
       <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', marginBottom: '30px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <h3 style={{ margin: 0 }}>New Patient Details</h3>
@@ -235,20 +228,19 @@ export default function Registration({ userRole, userEmail }) {
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Payment Method for Folder Fee *</label>
               <select name="payment_method" value={formData.payment_method} onChange={handleChange} style={inputStyle}>
-                <option value="Cash"> Cash</option>
-                <option value="Mobile Money">📱 Mobile Money</option>
+                <option value="Cash">💵 Cash</option>
+                <option value="Mobile Money"> Mobile Money</option>
                 <option value="Card">💳 Card</option>
               </select>
             </div>
           </div>
 
           <button type="submit" disabled={loading} style={{ width: '100%', padding: '15px', backgroundColor: loading ? '#9ca3af' : '#16a34a', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' }}>
-            {loading ? 'Processing...' : '✅ Register Patient & Collect GH 20'}
+            {loading ? 'Processing...' : '✅ Register Patient & Collect GH₵ 20'}
           </button>
         </form>
       </div>
 
-      {/* REGISTRATION FEE HISTORY TABLE */}
       <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', marginBottom: '30px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #16a34a', paddingBottom: '10px' }}>
           <h3 style={{ margin: 0, color: '#333' }}>
@@ -256,7 +248,7 @@ export default function Registration({ userRole, userEmail }) {
             {userRole === 'admin' ? ' (Admin View: All Staff)' : ' (Your Transactions)'}
           </h3>
           <button onClick={fetchRegHistory} style={{ padding: '8px 15px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px' }}>
-            🔄 Refresh
+             Refresh
           </button>
         </div>
         
@@ -302,7 +294,6 @@ export default function Registration({ userRole, userEmail }) {
         )}
       </div>
 
-      {/* MANUAL OVERRIDE QUEUE */}
       <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '2px solid #f59e0b', paddingBottom: '10px' }}>
           <h3 style={{ margin: 0, color: '#333' }}>⚠️ Manual Registration (External Payments)</h3>
