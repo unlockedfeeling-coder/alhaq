@@ -45,7 +45,7 @@ export default function Cashier() {
   const handleSelectPatient = async (consultation) => {
     setSelected(consultation)
     setMessage('')
-    const { data } = await supabase.from('patients').select('first_name, last_name').eq('patient_id', consultation.patient_id).single()
+    const { data } = await supabase.from('patients').select('first_name, last_name, patient_id').eq('patient_id', consultation.patient_id).single()
     setPatient(data)
   }
 
@@ -96,7 +96,7 @@ export default function Cashier() {
         @media print {
           body * { visibility: hidden; }
           #printable-receipt, #printable-receipt * { visibility: visible; }
-          #printable-receipt { position: absolute; left: 0; top: 0; width: 100%; }
+          #printable-receipt { position: absolute; left: 0; top: 0; width: 100%; max-width: 400px; margin: 0 auto; }
           .no-print { display: none !important; }
         }
         @media (max-width: 768px) {
@@ -181,7 +181,7 @@ export default function Cashier() {
         </div>
       </div>
 
-      {/* NEW: TRANSACTION HISTORY SECTION */}
+      {/* TRANSACTION HISTORY SECTION */}
       <div className="no-print" style={{ backgroundColor: 'white', padding: '25px', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '2px solid #e5e7eb', paddingBottom: '10px' }}>
           <h3 style={{ color: '#333', margin: 0 }}>📜 Transaction History</h3>
@@ -222,7 +222,7 @@ export default function Cashier() {
                         {rec.description && <div>📁 {rec.description}</div>}
                       </div>
                     </td>
-                    <td style={tdStyle}><strong style={{color: '#16a34a', fontSize: '15px'}}>GH{Number(rec.total_amount).toFixed(2)}</strong></td>
+                    <td style={tdStyle}><strong style={{color: '#16a34a', fontSize: '15px'}}>GH₵{Number(rec.total_amount).toFixed(2)}</strong></td>
                     <td style={tdStyle}>
                       <span style={{ 
                         backgroundColor: rec.payment_method === 'Cash' ? '#dcfce7' : rec.payment_method === 'Mobile Money' ? '#fef3c7' : '#dbeafe',
@@ -244,40 +244,54 @@ export default function Cashier() {
         )}
       </div>
 
-      {/* RECEIPT MODAL */}
+      {/* RECEIPT MODAL WITH DG SECURITY SYSTEMS BRANDING */}
       {showReceipt && receiptData && (
         <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div id="printable-receipt" style={{ backgroundColor: 'white', padding: '40px', borderRadius: '12px', maxWidth: '400px', width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
-            <div style={{ textAlign: 'center', borderBottom: '2px dashed #ccc', paddingBottom: '15px', marginBottom: '15px' }}>
-              <h2 style={{ margin: 0, color: '#16a34a' }}>🌿 Al-Haq Herbal Centre</h2>
-              <p style={{ margin: '5px 0', fontSize: '12px', color: '#666' }}>Official Payment Receipt</p>
+          <div id="printable-receipt" style={{ backgroundColor: 'white', padding: '30px', borderRadius: '8px', maxWidth: '380px', width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
+            
+            {/* HEADER WITH DG SECURITY SYSTEMS */}
+            <div style={{ textAlign: 'center', borderBottom: '2px solid #333', paddingBottom: '15px', marginBottom: '15px' }}>
+              <h3 style={{ margin: 0, color: '#333', fontSize: '14px', letterSpacing: '1.5px', fontWeight: 'bold' }}>DG SECURITY SYSTEMS</h3>
+              <h2 style={{ margin: '8px 0 5px 0', color: '#16a34a', fontSize: '20px' }}>🌿 Al-Haq Herbal Centre</h2>
+              <p style={{ margin: 0, fontSize: '12px', color: '#666', fontWeight: 'bold', textTransform: 'uppercase' }}>Official Payment Receipt</p>
             </div>
+
             <div style={{ fontSize: '14px', marginBottom: '15px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong>Receipt #:</strong> <span>{receiptData.receipt_number}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong>Date:</strong> <span>{new Date(receiptData.created_at).toLocaleString()}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong>Patient ID:</strong> <span>{receiptData.patient_id || 'Registration'}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}><strong>Patient Name:</strong> <span>{receiptData.patient_name}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}><strong>Receipt #:</strong> <span>{receiptData.receipt_number}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}><strong>Date:</strong> <span>{new Date(receiptData.created_at).toLocaleString()}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}><strong>Patient ID:</strong> <span>{receiptData.patient_id || 'Registration'}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}><strong>Patient:</strong> <span>{receiptData.patient_name}</span></div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}><strong>Cashier:</strong> <span>{receiptData.cashier_name}</span></div>
             </div>
-            <div style={{ borderTop: '1px solid #eee', paddingTop: '10px', marginBottom: '15px' }}>
+
+            <div style={{ borderTop: '1px dashed #ccc', paddingTop: '10px', marginBottom: '15px' }}>
               {receiptData.description ? (
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '5px' }}><span>{receiptData.description}</span><span>GH₵{Number(receiptData.total_amount).toFixed(2)}</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '5px' }}>
+                  <span>{receiptData.description}</span>
+                  <span>GH₵{Number(receiptData.total_amount).toFixed(2)}</span>
+                </div>
               ) : (
                 <>
-                  {receiptData.lab_fee > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '5px' }}><span>Lab Fees</span><span>GH{Number(receiptData.lab_fee).toFixed(2)}</span></div>}
+                  {receiptData.lab_fee > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '5px' }}><span>Lab Fees</span><span>GH₵{Number(receiptData.lab_fee).toFixed(2)}</span></div>}
                   {receiptData.radiology_fee > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '5px' }}><span>X-Ray / Scan</span><span>GH₵{Number(receiptData.radiology_fee).toFixed(2)}</span></div>}
                   {receiptData.dispensary_fee > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '5px' }}><span>Dispensary</span><span>GH₵{Number(receiptData.dispensary_fee).toFixed(2)}</span></div>}
                 </>
               )}
             </div>
+
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '18px', fontWeight: 'bold', borderTop: '2px solid #333', paddingTop: '10px', marginBottom: '15px' }}>
-              <span>TOTAL PAID</span><span style={{ color: '#16a34a' }}>GH₵{Number(receiptData.total_amount).toFixed(2)}</span>
+              <span>TOTAL PAID</span>
+              <span style={{ color: '#16a34a' }}>GH₵{Number(receiptData.total_amount).toFixed(2)}</span>
             </div>
-            <div style={{ textAlign: 'center', fontSize: '12px', color: '#666', borderTop: '2px dashed #ccc', paddingTop: '10px' }}>
+
+            {/* FOOTER WITH DG SECURITY SYSTEMS */}
+            <div style={{ textAlign: 'center', fontSize: '12px', color: '#666', borderTop: '2px dashed #ccc', paddingTop: '15px', marginTop: '15px' }}>
               <p style={{ margin: 0 }}>Payment Method: <strong>{receiptData.payment_method}</strong></p>
-              <p style={{ margin: '10px 0 0 0' }}>Thank you for choosing Al-Haq! 🌿</p>
+              <p style={{ margin: '10px 0 0 0', fontWeight: 'bold', color: '#333' }}>Thank you for choosing Al-Haq! 🌿</p>
+              <p style={{ margin: '15px 0 0 0', fontSize: '10px', color: '#999', letterSpacing: '0.5px' }}>Software & Support by DG Security Systems</p>
             </div>
-            <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }} className="no-print">
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '25px' }} className="no-print">
               <button onClick={handlePrint} style={{ flex: 1, padding: '12px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>🖨️ Print Receipt</button>
               <button onClick={() => setShowReceipt(false)} style={{ flex: 1, padding: '12px', backgroundColor: '#e5e7eb', color: '#333', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Close</button>
             </div>
@@ -311,14 +325,27 @@ function RegistrationFees({ onPaymentComplete, onShowReceipt }) {
     try {
       const receiptNum = `REG-${Date.now().toString().slice(-6)}`
       await supabase.from('receipts').insert([{
-        receipt_number: receiptNum, patient_id: selected.temp_reference || 'Registration',
-        patient_name: `${selected.first_name} ${selected.last_name}`, total_amount: 20,
-        payment_method: 'Cash', cashier_name: 'Cashier', description: 'Patient Registration / Folder Fee'
+        receipt_number: receiptNum, 
+        patient_id: selected.patient_id || selected.temp_reference || 'Registration',
+        patient_name: `${selected.first_name} ${selected.last_name}`, 
+        total_amount: 20,
+        payment_method: 'Cash', 
+        cashier_name: 'Cashier', 
+        description: 'Patient Registration / Folder Fee'
       }])
       await supabase.from('patients').update({ registration_paid: true }).eq('id', selected.id)
 
       if (onShowReceipt) {
-        onShowReceipt({ receipt_number: receiptNum, patient_name: `${selected.first_name} ${selected.last_name}`, total_amount: 20, payment_method: 'Cash', cashier_name: 'Cashier', description: 'Patient Registration / Folder Fee', created_at: new Date().toISOString() })
+        onShowReceipt({ 
+          receipt_number: receiptNum, 
+          patient_id: selected.patient_id || selected.temp_reference,
+          patient_name: `${selected.first_name} ${selected.last_name}`, 
+          total_amount: 20, 
+          payment_method: 'Cash', 
+          cashier_name: 'Cashier', 
+          description: 'Patient Registration / Folder Fee', 
+          created_at: new Date().toISOString() 
+        })
       }
       setSelected(null)
       const { data } = await supabase.from('patients').select('*').eq('registration_paid', false)
@@ -335,7 +362,7 @@ function RegistrationFees({ onPaymentComplete, onShowReceipt }) {
           pending.map((p) => (
             <div key={p.id} onClick={() => setSelected(p)} style={{ padding: '12px', marginBottom: '8px', backgroundColor: selected?.id === p.id ? '#fffbeb' : '#f9fafb', border: `1px solid ${selected?.id === p.id ? '#f59e0b' : '#e5e7eb'}`, borderRadius: '6px', cursor: 'pointer' }}>
               <div style={{ fontWeight: 'bold' }}>{p.first_name} {p.last_name}</div>
-              <div style={{ fontSize: '12px', color: '#666' }}>Ref: {p.temp_reference}</div>
+              <div style={{ fontSize: '12px', color: '#666' }}>Ref: {p.temp_reference || p.patient_id}</div>
             </div>
           ))
         }
@@ -346,7 +373,7 @@ function RegistrationFees({ onPaymentComplete, onShowReceipt }) {
             <h4 style={{ margin: '0 0 10px 0' }}>{selected.first_name} {selected.last_name}</h4>
             <p style={{ fontSize: '24px', fontWeight: 'bold', color: '#b45309', margin: '0 0 20px 0' }}>GH₵ 20.00</p>
             <button onClick={handleCollectFee} disabled={loading} style={{ padding: '12px 25px', backgroundColor: '#16a34a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
-              {loading ? 'Processing...' : '✅ Collect GH 20 & Print Receipt'}
+              {loading ? 'Processing...' : '✅ Collect GH₵ 20 & Print Receipt'}
             </button>
           </>
         ) : (

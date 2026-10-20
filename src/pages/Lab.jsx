@@ -22,7 +22,23 @@ export default function Lab() {
         .eq('sent_to_lab', true)
         .eq('lab_completed', false)
         .order('created_at', { ascending: false })
-      setQueue(data || [])
+      
+      // Fetch test names for each patient in the queue
+      const queueWithTests = await Promise.all(
+        (data || []).map(async (item) => {
+          const { data: services } = await supabase
+            .from('consultation_services')
+            .select('medical_services(name, category)')
+            .eq('consultation_id', item.id)
+          
+          const labServices = services?.filter(s => s.medical_services.category === 'Lab').map(s => s.medical_services.name)
+          const testName = labServices && labServices.length > 0 ? labServices.join(', ') : 'General Lab Test'
+          
+          return { ...item, test_name: testName }
+        })
+      )
+      
+      setQueue(queueWithTests)
     } catch (err) { console.error(err) }
     setLoading(false)
   }
@@ -31,23 +47,10 @@ export default function Lab() {
     setSelected(item)
     setMessage('')
     setFormData({ test_name: '', result: '', notes: '' })
-    setOrderedTests('')
+    setOrderedTests(item.test_name || '') // Use the test name we already fetched
 
     const { data } = await supabase.from('patients').select('first_name, last_name').eq('patient_id', item.patient_id).single()
     setPatient(data)
-
-    // Fetch the specific Lab tests ordered
-    const { data: services } = await supabase
-      .from('consultation_services')
-      .select('medical_services(name, category)')
-      .eq('consultation_id', item.id)
-    
-    const labServices = services?.filter(s => s.medical_services.category === 'Lab').map(s => s.medical_services.name)
-    if (labServices && labServices.length > 0) {
-      setOrderedTests(labServices.join(', '))
-    } else {
-      setOrderedTests('General Lab Test')
-    }
   }
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value })
@@ -113,9 +116,12 @@ export default function Lab() {
           {queue.length === 0 ? <p style={{textAlign: 'center', color: '#666'}}>No patients waiting for lab tests.</p> : 
             queue.map((item) => (
               <div key={item.id} onClick={() => handleSelect(item)} style={{ padding: '15px', marginBottom: '10px', backgroundColor: selected?.id === item.id ? '#eff6ff' : '#f9fafb', border: `1px solid ${selected?.id === item.id ? '#3b82f6' : '#e5e7eb'}`, borderRadius: '8px', cursor: 'pointer' }}>
-                <div style={{ fontWeight: 'bold' }}>ID: {item.patient_id}</div>
-                <div style={{ fontSize: '12px', marginTop: '5px', color: item.lab_paid ? '#16a34a' : '#f59e0b', fontWeight: 'bold' }}>
-                  {item.lab_paid ? '✅ PAID - Ready for Test' : '⏳ Awaiting Payment'}
+                <div style={{ fontWeight: 'bold', fontSize: '16px' }}>ID: {item.patient_id}</div>
+                <div style={{ fontSize: '13px', color: '#dc2626', fontWeight: '600', marginTop: '4px' }}>
+                  🧪 {item.test_name || 'Lab Test'}
+                </div>
+                <div style={{ fontSize: '12px', marginTop: '8px', color: item.lab_paid ? '#16a34a' : '#f59e0b', fontWeight: 'bold' }}>
+                  {item.lab_paid ? '✅ PAID - Ready for Test' : ' Awaiting Payment'}
                 </div>
               </div>
             ))

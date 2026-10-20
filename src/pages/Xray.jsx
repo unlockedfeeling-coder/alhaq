@@ -22,7 +22,23 @@ export default function Xray() {
         .eq('sent_to_radiology', true)
         .eq('radiology_completed', false)
         .order('created_at', { ascending: false })
-      setQueue(data || [])
+      
+      // Fetch X-Ray names for each patient in the queue
+      const queueWithXray = await Promise.all(
+        (data || []).map(async (item) => {
+          const { data: services } = await supabase
+            .from('consultation_services')
+            .select('medical_services(name, category)')
+            .eq('consultation_id', item.id)
+          
+          const xrayService = services?.find(s => s.medical_services.category === 'X-Ray')
+          const xrayName = xrayService ? xrayService.medical_services.name : 'General X-Ray'
+          
+          return { ...item, xray_name: xrayName }
+        })
+      )
+      
+      setQueue(queueWithXray)
     } catch (err) { console.error(err) }
     setLoading(false)
   }
@@ -32,22 +48,10 @@ export default function Xray() {
     setMessage('')
     setFormData({ body_part: '', findings: '' })
     setSelectedFile(null)
-    setOrderedXray('')
+    setOrderedXray(item.xray_name || '') // Use the pre-fetched name
 
     const { data } = await supabase.from('patients').select('first_name, last_name').eq('patient_id', item.patient_id).single()
     setPatient(data)
-
-    const { data: services } = await supabase
-      .from('consultation_services')
-      .select('medical_services(name, category)')
-      .eq('consultation_id', item.id)
-    
-    const xrayService = services?.find(s => s.medical_services.category === 'X-Ray')
-    if (xrayService) {
-      setOrderedXray(xrayService.medical_services.name)
-    } else {
-      setOrderedXray('General X-Ray')
-    }
   }
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value })
@@ -130,8 +134,11 @@ export default function Xray() {
           {queue.length === 0 ? <p style={{textAlign: 'center', color: '#666'}}>No patients waiting for X-Ray.</p> : 
             queue.map((item) => (
               <div key={item.id} onClick={() => handleSelect(item)} style={{ padding: '15px', marginBottom: '10px', backgroundColor: selected?.id === item.id ? '#fdf2f8' : '#f9fafb', border: `1px solid ${selected?.id === item.id ? '#ec4899' : '#e5e7eb'}`, borderRadius: '8px', cursor: 'pointer' }}>
-                <div style={{ fontWeight: 'bold' }}>ID: {item.patient_id}</div>
-                <div style={{ fontSize: '12px', marginTop: '5px', color: item.radiology_paid ? '#16a34a' : '#f59e0b', fontWeight: 'bold' }}>
+                <div style={{ fontWeight: 'bold', fontSize: '16px' }}>ID: {item.patient_id}</div>
+                <div style={{ fontSize: '13px', color: '#9d174d', fontWeight: '600', marginTop: '4px' }}>
+                  🩻 {item.xray_name || 'X-Ray'}
+                </div>
+                <div style={{ fontSize: '12px', marginTop: '8px', color: item.radiology_paid ? '#16a34a' : '#f59e0b', fontWeight: 'bold' }}>
                   {item.radiology_paid ? '✅ PAID - Ready for X-Ray' : '⏳ Awaiting Payment'}
                 </div>
               </div>

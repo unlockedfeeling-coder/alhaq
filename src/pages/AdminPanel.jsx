@@ -59,7 +59,8 @@ export default function AdminPanel() {
   const [newEmail, setNewEmail] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [newName, setNewName] = useState('')
-  const [newRole, setNewRole] = useState('receptionist')
+  // UPDATED: Default role changed to registerer
+  const [newRole, setNewRole] = useState('registerer')
 
   // Reset Password State
   const [resetEmail, setResetEmail] = useState('')
@@ -250,10 +251,17 @@ export default function AdminPanel() {
             <div><label style={labelStyle}>Email Address *</label><input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} style={inputStyle} required /></div>
             <div><label style={labelStyle}>Temporary Password *</label><input type="text" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} style={inputStyle} required placeholder="e.g. password123" /></div>
             <div><label style={labelStyle}>Assign Role *</label>
+              {/* UPDATED: Role options changed to match Sidebar expectations */}
               <select value={newRole} onChange={(e) => setNewRole(e.target.value)} style={inputStyle}>
-                <option value="receptionist">Receptionist</option><option value="nurse">Nurse</option><option value="doctor">Doctor</option>
-                <option value="cashier">Cashier</option><option value="lab">Lab Technician</option><option value="radiology">Radiology Technician</option>
-                <option value="pharmacist">Pharmacist</option><option value="admin">Admin</option>
+                <option value="registerer">Registerer</option>
+                <option value="nurse">Nurse</option>
+                <option value="doctor">Doctor</option>
+                <option value="cashier">Cashier</option>
+                <option value="lab">Lab Technician</option>
+                <option value="xray">X-Ray Technician</option>
+                <option value="scan">Scan Technician</option>
+                <option value="pharmacist">Pharmacist</option>
+                <option value="admin">Admin</option>
               </select>
             </div>
             <button type="submit" disabled={loading} style={{ width: '100%', padding: '15px', backgroundColor: loading ? '#9ca3af' : '#16a34a', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer' }}>

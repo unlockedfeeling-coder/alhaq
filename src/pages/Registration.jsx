@@ -3,7 +3,7 @@ import { supabase } from '../config/supabase'
 
 export default function Registration({ userRole, userEmail }) {
   const [formData, setFormData] = useState({
-    first_name: '', last_name: '', date_of_birth: '', gender: 'Male', 
+    first_name: '', middle_name: '', last_name: '', date_of_birth: '', gender: 'Male', 
     phone: '', address: '', blood_type: 'O+', allergies: '', payment_method: 'Cash'
   })
   const [loading, setLoading] = useState(false)
@@ -44,17 +44,17 @@ export default function Registration({ userRole, userEmail }) {
       if (error) throw error
       if (data) {
         setReturningPatient(data)
-        setMessage(`✅ Patient Verified: ${data.first_name} ${data.last_name} is already registered.`)
+        setMessage(`✅ Patient Verified: ${data.first_name} ${data.middle_name || ''} ${data.last_name} is already registered.`)
       }
     } catch (err) {
-      setReturningError('❌ Patient ID not found.')
+      setReturningError('❌ Patient ID not found. If they are new, please register them below.')
     }
     setLoading(false)
   }
 
-  // 🛡️ BULLETPROOF ID GENERATOR: Uses timestamp to guarantee 100% uniqueness
+  // 🛡️ BULLETPROOF ID GENERATOR
   const getNextPatientId = async () => {
-    const uniqueId = Date.now().toString().slice(-5); // Gets last 5 digits of current milliseconds
+    const uniqueId = Date.now().toString().slice(-5); 
     return `AH-2026-${uniqueId}`;
   }
 
@@ -68,6 +68,7 @@ export default function Registration({ userRole, userEmail }) {
 
       const { data: patientData, error: patientError } = await supabase.from('patients').insert([{
         first_name: formData.first_name,
+        middle_name: formData.middle_name || null,
         last_name: formData.last_name,
         date_of_birth: formData.date_of_birth || null,
         gender: formData.gender,
@@ -87,7 +88,7 @@ export default function Registration({ userRole, userEmail }) {
       await supabase.from('receipts').insert([{
         receipt_number: receiptNum,
         patient_id: newId,
-        patient_name: `${formData.first_name} ${formData.last_name}`,
+        patient_name: `${formData.first_name} ${formData.middle_name || ''} ${formData.last_name}`.trim(),
         total_amount: 20,
         payment_method: formData.payment_method,
         cashier_name: userEmail || 'Reception Desk',
@@ -96,13 +97,23 @@ export default function Registration({ userRole, userEmail }) {
       }])
 
       setMessage(`🎉 Registration Complete & Paid! New Patient ID: ${newId}`)
-      setFormData({ first_name: '', last_name: '', date_of_birth: '', gender: 'Male', phone: '', address: '', blood_type: 'O+', allergies: '', payment_method: 'Cash' })
+      setFormData({ first_name: '', middle_name: '', last_name: '', date_of_birth: '', gender: 'Male', phone: '', address: '', blood_type: 'O+', allergies: '', payment_method: 'Cash' })
       
       fetchRegHistory()
       fetchPending()
       
     } catch (err) { 
-      setMessage('❌ Error: ' + err.message) 
+      console.error("Registration Error:", err)
+      // Smart error message for database constraints
+      if (err.message.includes('duplicate key') || err.message.includes('unique constraint')) {
+        if (err.message.includes('phone')) {
+          setMessage('❌ Error: This Phone Number is already registered. Please check "Recover ID" or use a different number.')
+        } else {
+          setMessage('❌ Error: A patient with these exact details already exists. Please check the database constraints.')
+        }
+      } else {
+        setMessage('❌ Error: ' + err.message) 
+      }
     }
     setLoading(false)
   }
@@ -178,7 +189,7 @@ export default function Registration({ userRole, userEmail }) {
         {returningError && <div style={{ marginTop: '15px', color: '#dc2626', fontWeight: 'bold' }}>{returningError}</div>}
         {returningPatient && (
           <div style={{ marginTop: '15px', padding: '15px', backgroundColor: '#eff6ff', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
-            <strong>Verified:</strong> {returningPatient.first_name} {returningPatient.last_name} is already in the system.
+            <strong>Verified:</strong> {returningPatient.first_name} {returningPatient.middle_name} {returningPatient.last_name} is already in the system.
           </div>
         )}
       </div>
@@ -194,6 +205,7 @@ export default function Registration({ userRole, userEmail }) {
         <form onSubmit={handleRegisterAndPay}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
             <div><label style={labelStyle}>First Name *</label><input name="first_name" value={formData.first_name} onChange={handleChange} style={inputStyle} required /></div>
+            <div><label style={labelStyle}>Middle Name (Optional)</label><input name="middle_name" value={formData.middle_name} onChange={handleChange} style={inputStyle} /></div>
             <div><label style={labelStyle}>Last Name *</label><input name="last_name" value={formData.last_name} onChange={handleChange} style={inputStyle} required /></div>
             <div><label style={labelStyle}>Date of Birth</label><input type="date" name="date_of_birth" value={formData.date_of_birth} onChange={handleChange} style={inputStyle} /></div>
             <div><label style={labelStyle}>Gender</label>
@@ -292,7 +304,7 @@ export default function Registration({ userRole, userEmail }) {
             {pendingPatients.map((p) => (
               <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px' }}>
                 <div>
-                  <div style={{ fontWeight: 'bold', fontSize: '16px' }}>{p.first_name} {p.last_name}</div>
+                  <div style={{ fontWeight: 'bold', fontSize: '16px' }}>{p.first_name} {p.middle_name} {p.last_name}</div>
                   <div style={{ fontSize: '13px', color: '#666' }}>Temp Ref: {p.temp_reference} • Phone: {p.phone}</div>
                 </div>
                 <button 
