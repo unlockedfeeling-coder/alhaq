@@ -43,14 +43,35 @@ export default function Lab() {
     setLoading(false)
   }
 
+  // BULLETPROOF PATIENT FETCH
   const handleSelect = async (item) => {
     setSelected(item)
     setMessage('')
     setFormData({ test_name: '', result: '', notes: '' })
-    setOrderedTests(item.test_name || '') // Use the test name we already fetched
+    setOrderedTests(item.test_name || '')
 
-    const { data } = await supabase.from('patients').select('first_name, last_name').eq('patient_id', item.patient_id).single()
-    setPatient(data)
+    try {
+      // FIX: Use limit(1) instead of single() to prevent crashes
+      const { data, error } = await supabase
+        .from('patients')
+        .select('first_name, last_name')
+        .eq('patient_id', item.patient_id.trim().toUpperCase())
+        .limit(1)
+
+      if (error) throw error
+
+      if (!data || data.length === 0) {
+        setMessage('❌ Patient details not found.')
+        setPatient(null)
+        return
+      }
+
+      setPatient(data[0])
+    } catch (err) {
+      console.error('Error fetching patient:', err)
+      setMessage('❌ Error loading patient details.')
+      setPatient(null)
+    }
   }
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value })
@@ -118,7 +139,7 @@ export default function Lab() {
               <div key={item.id} onClick={() => handleSelect(item)} style={{ padding: '15px', marginBottom: '10px', backgroundColor: selected?.id === item.id ? '#eff6ff' : '#f9fafb', border: `1px solid ${selected?.id === item.id ? '#3b82f6' : '#e5e7eb'}`, borderRadius: '8px', cursor: 'pointer' }}>
                 <div style={{ fontWeight: 'bold', fontSize: '16px' }}>ID: {item.patient_id}</div>
                 <div style={{ fontSize: '13px', color: '#dc2626', fontWeight: '600', marginTop: '4px' }}>
-                  🧪 {item.test_name || 'Lab Test'}
+                   {item.test_name || 'Lab Test'}
                 </div>
                 <div style={{ fontSize: '12px', marginTop: '8px', color: item.lab_paid ? '#16a34a' : '#f59e0b', fontWeight: 'bold' }}>
                   {item.lab_paid ? '✅ PAID - Ready for Test' : ' Awaiting Payment'}

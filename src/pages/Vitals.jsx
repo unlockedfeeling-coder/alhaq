@@ -7,7 +7,6 @@ export default function Vitals() {
   const [pastVitals, setPastVitals] = useState([])
   const [editedMiddleName, setEditedMiddleName] = useState('')
   
-  // REMOVED: 'notes' from formData
   const [formData, setFormData] = useState({
     blood_pressure: '', heart_rate: '', temperature: '', weight: '', height: ''
   })
@@ -31,10 +30,10 @@ export default function Vitals() {
 
   const getBMIColor = (bmi) => {
     if (!bmi) return '#666'
-    if (bmi < 18.5) return '#dc2626' // Red (Underweight)
-    if (bmi < 25) return '#16a34a'   // Green (Normal)
-    if (bmi < 30) return '#f59e0b'   // Orange (Overweight)
-    return '#dc2626'                 // Red (Obese)
+    if (bmi < 18.5) return '#dc2626' 
+    if (bmi < 25) return '#16a34a'   
+    if (bmi < 30) return '#f59e0b'   
+    return '#dc2626'                 
   }
 
   const getBMILabel = (bmi) => {
@@ -45,6 +44,7 @@ export default function Vitals() {
     return '(Obese)'
   }
 
+  // BULLETPROOF SEARCH FUNCTION
   const handleSearch = async (e) => {
     if (e) e.preventDefault()
     if (!searchId) return
@@ -55,25 +55,40 @@ export default function Vitals() {
     setPastVitals([])
 
     try {
-      const { data, error } = await supabase.from('patients').select('*').eq('patient_id', searchId.toUpperCase()).single()
+      // FIX: Use limit(1) instead of single() to prevent "Cannot coerce" errors
+      const { data, error } = await supabase
+        .from('patients')
+        .select('*')
+        .eq('patient_id', searchId.trim().toUpperCase())
+        .limit(1)
+
       if (error) throw error
-      
-      setPatient(data)
-      setEditedMiddleName(data.middle_name || '')
+
+      if (!data || data.length === 0) {
+        setMessage('❌ Patient not found. Please check the ID and try again.')
+        setLoading(false)
+        return
+      }
+
+      // Safely grab the first result
+      const patientData = data[0]
+      setPatient(patientData)
+      setEditedMiddleName(patientData.middle_name || '')
 
       // Fetch Past Vitals
       const { data: vitalsData, error: vitalsError } = await supabase
         .from('vitals')
         .select('*')
-        .eq('patient_id', searchId.toUpperCase())
+        .eq('patient_id', patientData.patient_id)
         .order('created_at', { ascending: false })
         .limit(5)
-      
+
       if (vitalsError) console.error("Error fetching vitals:", vitalsError)
       setPastVitals(vitalsData || [])
 
     } catch (err) { 
-      setMessage('❌ Patient not found: ' + err.message) 
+      console.error('Search error:', err)
+      setMessage('❌ Error searching patient: ' + err.message) 
     }
     setLoading(false)
   }
@@ -85,6 +100,7 @@ export default function Vitals() {
     setMessage('')
 
     try {
+      // Update Middle Name if changed
       if (editedMiddleName !== patient.middle_name) {
         const { error: updateError } = await supabase
           .from('patients')
@@ -95,7 +111,7 @@ export default function Vitals() {
 
       const bmiValue = calculateBMI()
 
-      // REMOVED: notes from the insert payload
+      // Insert new vitals
       const { error } = await supabase.from('vitals').insert([{ 
         patient_id: patient.patient_id, 
         ...formData,
@@ -105,7 +121,7 @@ export default function Vitals() {
 
       setMessage('✅ Vitals recorded successfully! Patient can now proceed to the Doctor.')
       
-      // Reset form (without notes)
+      // Reset form
       setFormData({ blood_pressure: '', heart_rate: '', temperature: '', weight: '', height: '' })
       
       // Refresh history
@@ -169,7 +185,7 @@ export default function Vitals() {
           {/* PAST VITALS HISTORY SECTION */}
           <div style={{ marginBottom: '25px', backgroundColor: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
             <h4 style={{ margin: '0 0 10px 0', color: '#475569', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-               📜 Past Vitals History
+                Past Vitals History
             </h4>
             
             {pastVitals.length > 0 ? (
@@ -249,8 +265,6 @@ export default function Vitals() {
               )}
             </div>
             
-            {/* REMOVED: Additional Notes Textarea */}
-
             <button type="submit" disabled={loading} style={{ width: '100%', padding: '15px', backgroundColor: loading ? '#9ca3af' : '#16a34a', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' }}>
               {loading ? 'Saving...' : '💾 Save New Vitals & Proceed'}
             </button>

@@ -43,15 +43,36 @@ export default function Xray() {
     setLoading(false)
   }
 
+  // BULLETPROOF PATIENT FETCH
   const handleSelect = async (item) => {
     setSelected(item)
     setMessage('')
     setFormData({ body_part: '', findings: '' })
     setSelectedFile(null)
-    setOrderedXray(item.xray_name || '') // Use the pre-fetched name
+    setOrderedXray(item.xray_name || '')
 
-    const { data } = await supabase.from('patients').select('first_name, last_name').eq('patient_id', item.patient_id).single()
-    setPatient(data)
+    try {
+      // FIX: Use limit(1) instead of single() to prevent crashes
+      const { data, error } = await supabase
+        .from('patients')
+        .select('first_name, last_name')
+        .eq('patient_id', item.patient_id.trim().toUpperCase())
+        .limit(1)
+
+      if (error) throw error
+
+      if (!data || data.length === 0) {
+        setMessage('❌ Patient details not found.')
+        setPatient(null)
+        return
+      }
+
+      setPatient(data[0])
+    } catch (err) {
+      console.error('Error fetching patient:', err)
+      setMessage('❌ Error loading patient details.')
+      setPatient(null)
+    }
   }
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value })
