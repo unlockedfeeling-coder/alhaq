@@ -29,7 +29,7 @@ export default function Dashboard({ userRole, userEmail }) {
   // --- ROLE PERMISSIONS ---
   const rolePermissions = {
     admin: ['dashboard', 'registration', 'vitals', 'consulting', 'cashier', 'lab', 'xray', 'scan', 'dispensary', 'inventory', 'history', 'recover-id', 'admin-panel'],
-    receptionist: ['dashboard', 'registration', 'recover-id'],
+    registerer: ['dashboard', 'registration', 'recover-id'],
     nurse: ['dashboard', 'vitals'],
     doctor: ['dashboard', 'consulting', 'history'],
     cashier: ['dashboard', 'cashier'],
@@ -39,9 +39,8 @@ export default function Dashboard({ userRole, userEmail }) {
     pharmacist: ['dashboard', 'dispensary', 'inventory']
   }
 
-  const allowedPages = rolePermissions[userRole] || rolePermissions.receptionist;
+  const allowedPages = rolePermissions[userRole] || rolePermissions.registerer;
 
-  // Sync URL with active page & block unauthorized access
   useEffect(() => {
     const path = location.pathname.split('/').pop()
     if (path && path !== 'dashboard') {
@@ -50,32 +49,58 @@ export default function Dashboard({ userRole, userEmail }) {
     } else { setActivePage('dashboard') }
   }, [location, allowedPages, navigate])
 
-  // Fetch Real Data on Load
-  useEffect(() => {
-    const fetchStats = async () => {
-      setLoadingStats(true)
-      try {
-        const today = new Date().toISOString().split('T')[0]
-        const startOfDay = `${today}T00:00:00`
-        const endOfDay = `${today}T23:59:59`
+  // --- THE FIX: Extracted stats fetching into its own function ---
+  const fetchDashboardStats = async () => {
+    setLoadingStats(true)
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const startOfDay = `${today}T00:00:00`
+      const endOfDay = `${today}T23:59:59`
 
-        const { count: patientsToday } = await supabase.from('patients').select('id', { count: 'exact', head: true }).gte('registered_at', startOfDay).lte('registered_at', endOfDay)
-        
-        let revenue = 0;
-        if (userRole === 'admin') {
-          const { data: todayReceipts } = await supabase.from('receipts').select('total_amount').gte('created_at', startOfDay).lte('created_at', endOfDay)
-          revenue = todayReceipts ? todayReceipts.reduce((sum, r) => sum + Number(r.total_amount), 0) : 0
-        }
+      const { count: patientsToday } = await supabase
+        .from('patients')
+        .select('id', { count: 'exact', head: true })
+        .gte('registered_at', startOfDay)
+        .lte('registered_at', endOfDay)
+      
+      let revenue = 0;
+      if (userRole === 'admin') {
+        const { data: todayReceipts } = await supabase
+          .from('receipts')
+          .select('total_amount')
+          .gte('created_at', startOfDay)
+          .lte('created_at', endOfDay)
+        revenue = todayReceipts ? todayReceipts.reduce((sum, r) => sum + Number(r.total_amount), 0) : 0
+      }
 
-        const { count: activeConsultations } = await supabase.from('consultations').select('id', { count: 'exact', head: true }).gte('created_at', startOfDay).lte('created_at', endOfDay).neq('status', 'discharged').neq('status', 'completed')
-        const { count: pendingTasks } = await supabase.from('consultations').select('id', { count: 'exact', head: true }).eq('cashier_completed', false).neq('status', 'discharged').neq('status', 'completed')
+      const { count: activeConsultations } = await supabase
+        .from('consultations')
+        .select('id', { count: 'exact', head: true })
+        .gte('created_at', startOfDay)
+        .lte('created_at', endOfDay)
+        .neq('status', 'discharged')
+        .neq('status', 'completed')
 
-        setStats({ patients: patientsToday || 0, revenue: revenue, queue: activeConsultations || 0, pending: pendingTasks || 0 })
-      } catch (err) { console.error("Error fetching dashboard stats:", err) }
-      setLoadingStats(false)
+      const { count: pendingTasks } = await supabase
+        .from('patients')
+        .select('id', { count: 'exact', head: true })
+        .eq('registration_paid', false)
+
+      setStats({ 
+        patients: patientsToday || 0, 
+        revenue: revenue, 
+        queue: activeConsultations || 0, 
+        pending: pendingTasks || 0 
+      })
+    } catch (err) { 
+      console.error("Error fetching dashboard stats:", err) 
     }
+    setLoadingStats(false)
+  }
 
-    if (activePage === 'dashboard') fetchStats()
+  // Call the function when the page loads or changes
+  useEffect(() => {
+    if (activePage === 'dashboard') fetchDashboardStats()
   }, [activePage, userRole])
 
   const handleNavigation = (page) => {
@@ -95,15 +120,16 @@ export default function Dashboard({ userRole, userEmail }) {
                   🖨️ Print Daily Report
                 </button>
               )}
-              <button onClick={() => handleNavigation('dashboard')} className="no-print" style={{ padding: '8px 15px', backgroundColor: '#e5e7eb', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', color: '#374151' }}>
-                🔄 Refresh Data
+              {/* FIX: Button now calls fetchDashboardStats directly */}
+              <button onClick={fetchDashboardStats} className="no-print" style={{ padding: '8px 15px', backgroundColor: '#e5e7eb', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', color: '#374151' }}>
+                 Refresh Data
               </button>
             </div>
           </div>
           
           <div id="admin-daily-report" className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
             <div style={{ background: 'rgba(255, 255, 255, 0.9)', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', borderLeft: '5px solid #16a34a' }}>
-              <h3 style={{ color: '#666', fontSize: '14px', margin: '0 0 10px 0' }}>👥 Patients Today</h3>
+              <h3 style={{ color: '#666', fontSize: '14px', margin: '0 0 10px 0' }}> Patients Today</h3>
               <div style={{ fontSize: '42px', fontWeight: 'bold', color: '#16a34a' }}>{loadingStats ? '...' : stats.patients}</div>
             </div>
             <div style={{ background: 'rgba(255, 255, 255, 0.9)', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', borderLeft: '5px solid #3b82f6' }}>
@@ -126,7 +152,6 @@ export default function Dashboard({ userRole, userEmail }) {
         </div>
       )
     } 
-    // UPDATED: Passing userRole and userEmail to Registration
     else if (activePage === 'registration') return <Registration userRole={userRole} userEmail={userEmail} />
     else if (activePage === 'vitals') return <Vitals />
     else if (activePage === 'consulting') return <Consulting />
@@ -145,18 +170,11 @@ export default function Dashboard({ userRole, userEmail }) {
 
   return (
     <div>
-      {/* STEP 3: Background Overlay for better readability across all pages */}
       <div style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(255, 255, 255, 0.92)', /* 92% white overlay */
-        zIndex: -1
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: 'rgba(255, 255, 255, 0.92)', zIndex: -1
       }} />
 
-      {/* MOBILE RESPONSIVE CSS PATCH + PRINT STYLES */}
       <style>{`
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes slideInDown { from { opacity: 0; transform: translateY(-30px); } to { opacity: 1; transform: translateY(0); } }
@@ -165,7 +183,6 @@ export default function Dashboard({ userRole, userEmail }) {
         nav button::before { content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent); transition: left 0.5s ease; }
         nav button:hover::before { left: 100%; }
 
-        /* --- MOBILE RESPONSIVE PATCH --- */
         @media (max-width: 768px) {
           .main-layout { flex-direction: column !important; }
           .sidebar { width: 100% !important; max-height: none !important; box-shadow: 0 4px 10px rgba(0,0,0,0.1) !important; }
@@ -176,7 +193,6 @@ export default function Dashboard({ userRole, userEmail }) {
           table { display: block; overflow-x: auto; white-space: nowrap; }
         }
 
-        /* --- ADMIN PRINT REPORT STYLES --- */
         @media print {
           body * { visibility: hidden; }
           #admin-daily-report, #admin-daily-report * { visibility: visible; }
@@ -187,22 +203,15 @@ export default function Dashboard({ userRole, userEmail }) {
 
       <div className="main-layout" style={{ display: 'flex', minHeight: '100vh', fontFamily: 'Arial, sans-serif', backgroundColor: 'transparent' }}>
         
-        {/* STEP 4: Adjust Sidebar Transparency & Blur Effect */}
         <div className="sidebar" style={{ 
-          width: '260px', 
-          backgroundColor: 'rgba(30, 41, 59, 0.95)', /* 95% opacity for background blend */
-          backdropFilter: 'blur(10px)', /* Glassmorphism blur effect */
-          color: 'white', 
-          display: 'flex', 
-          flexDirection: 'column', 
-          boxShadow: '4px 0 15px rgba(0,0,0,0.1)', 
-          zIndex: 10 
+          width: '260px', backgroundColor: 'rgba(30, 41, 59, 0.95)', backdropFilter: 'blur(10px)',
+          color: 'white', display: 'flex', flexDirection: 'column', boxShadow: '4px 0 15px rgba(0,0,0,0.1)', zIndex: 10 
         }}>
           <div style={{ padding: '25px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
             <h1 style={{ margin: 0, color: '#4ade80', fontSize: '28px' }}>🌿 Al-Haq</h1>
             <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#94a3b8' }}>Herbal Centre HMS</p>
             <div style={{ marginTop: '10px', padding: '4px 10px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '12px', display: 'inline-block', fontSize: '11px', color: '#fbbf24', fontWeight: 'bold', textTransform: 'uppercase' }}>
-              {userRole || 'Staff'}
+              {userRole === 'registerer' ? 'Registerer' : userRole || 'Staff'}
             </div>
           </div>
           
@@ -212,7 +221,7 @@ export default function Dashboard({ userRole, userEmail }) {
             {isAllowed('vitals') && <button onClick={() => handleNavigation('vitals')} style={sidebarButtonStyle(activePage === 'vitals')}>❤️ Vitals</button>}
             {isAllowed('consulting') && <button onClick={() => handleNavigation('consulting')} style={sidebarButtonStyle(activePage === 'consulting')}>🩺 Consulting</button>}
             {isAllowed('cashier') && <button onClick={() => handleNavigation('cashier')} style={sidebarButtonStyle(activePage === 'cashier')}>💰 Cashier</button>}
-            {isAllowed('lab') && <button onClick={() => handleNavigation('lab')} style={sidebarButtonStyle(activePage === 'lab')}>🧪 Lab</button>}
+            {isAllowed('lab') && <button onClick={() => handleNavigation('lab')} style={sidebarButtonStyle(activePage === 'lab')}> Lab</button>}
             {isAllowed('xray') && <button onClick={() => handleNavigation('xray')} style={sidebarButtonStyle(activePage === 'xray')}>🩻 X-Ray</button>}
             {isAllowed('scan') && <button onClick={() => handleNavigation('scan')} style={sidebarButtonStyle(activePage === 'scan')}>🔬 Scan</button>}
             {isAllowed('dispensary') && <button onClick={() => handleNavigation('dispensary')} style={sidebarButtonStyle(activePage === 'dispensary')}>🌿 Dispensary</button>}
@@ -240,8 +249,7 @@ function sidebarButtonStyle(isActive) {
   return {
     display: 'block', width: '100%', padding: '15px', marginBottom: '10px',
     backgroundColor: isActive ? '#16a34a' : 'rgba(255, 255, 255, 0.05)',
-    color: 'white',
-    border: 'none', borderRadius: '10px', textAlign: 'left', fontSize: '15px',
+    color: 'white', border: 'none', borderRadius: '10px', textAlign: 'left', fontSize: '15px',
     cursor: 'pointer', fontWeight: isActive ? 'bold' : 'normal',
     transition: 'all 0.3s ease',
     boxShadow: isActive ? '0 4px 12px rgba(22, 163, 74, 0.3)' : 'none',

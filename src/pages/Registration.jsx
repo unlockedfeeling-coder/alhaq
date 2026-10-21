@@ -11,6 +11,10 @@ export default function Registration({ userRole, userEmail }) {
   const [pendingPatients, setPendingPatients] = useState([])
   const [regHistory, setRegHistory] = useState([])
 
+  // NEW: Pagination States
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10 // Shows 10 records per page
+
   const [returningId, setReturningId] = useState('')
   const [returningPatient, setReturningPatient] = useState(null)
   const [returningError, setReturningError] = useState('')
@@ -21,6 +25,7 @@ export default function Registration({ userRole, userEmail }) {
   }, [])
 
   const fetchRegHistory = async () => {
+    setCurrentPage(1) // Reset to page 1 when refreshing data
     const { data, error } = await supabase
       .from('receipts')
       .select('*')
@@ -47,12 +52,11 @@ export default function Registration({ userRole, userEmail }) {
         setMessage(`✅ Patient Verified: ${data.first_name} ${data.middle_name || ''} ${data.last_name} is already registered.`)
       }
     } catch (err) {
-      setReturningError('❌ Patient ID not found. If they are new, please register them below.')
+      setReturningError(' Patient ID not found.')
     }
     setLoading(false)
   }
 
-  // 🛡️ BULLETPROOF ID GENERATOR
   const getNextPatientId = async () => {
     const uniqueId = Date.now().toString().slice(-5); 
     return `AH-2026-${uniqueId}`;
@@ -103,17 +107,7 @@ export default function Registration({ userRole, userEmail }) {
       fetchPending()
       
     } catch (err) { 
-      console.error("Registration Error:", err)
-      // Smart error message for database constraints
-      if (err.message.includes('duplicate key') || err.message.includes('unique constraint')) {
-        if (err.message.includes('phone')) {
-          setMessage('❌ Error: This Phone Number is already registered. Please check "Recover ID" or use a different number.')
-        } else {
-          setMessage('❌ Error: A patient with these exact details already exists. Please check the database constraints.')
-        }
-      } else {
-        setMessage('❌ Error: ' + err.message) 
-      }
+      setMessage(' Error: ' + err.message) 
     }
     setLoading(false)
   }
@@ -158,6 +152,15 @@ export default function Registration({ userRole, userEmail }) {
   const visibleHistory = userRole === 'admin' 
     ? regHistory 
     : regHistory.filter(r => r.cashier_name === userEmail)
+
+  // PAGINATION LOGIC
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = visibleHistory.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(visibleHistory.length / itemsPerPage);
+
+  const handleNextPage = () => { if (currentPage < totalPages) setCurrentPage(currentPage + 1); }
+  const handlePrevPage = () => { if (currentPage > 1) setCurrentPage(currentPage - 1); }
 
   return (
     <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
@@ -266,7 +269,8 @@ export default function Registration({ userRole, userEmail }) {
                 </tr>
               </thead>
               <tbody>
-                {visibleHistory.map((rec) => (
+                {/* UPDATED: Map over currentItems instead of visibleHistory */}
+                {currentItems.map((rec) => (
                   <tr key={rec.id}>
                     <td style={tdStyle}>{new Date(rec.created_at).toLocaleString()}</td>
                     <td style={tdStyle}><strong style={{color: '#3b82f6'}}>{rec.receipt_number}</strong></td>
@@ -287,6 +291,41 @@ export default function Registration({ userRole, userEmail }) {
                 ))}
               </tbody>
             </table>
+
+            {/* NEW: PAGINATION CONTROLS */}
+            {totalPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', marginTop: '25px', paddingTop: '15px', borderTop: '1px solid #e5e7eb' }}>
+                <button 
+                  onClick={handlePrevPage} 
+                  disabled={currentPage === 1}
+                  style={{ 
+                    padding: '8px 16px', 
+                    backgroundColor: currentPage === 1 ? '#e5e7eb' : '#3b82f6', 
+                    color: currentPage === 1 ? '#9ca3af' : 'white', 
+                    border: 'none', borderRadius: '6px', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontWeight: 'bold' 
+                  }}
+                >
+                  ← Previous
+                </button>
+                
+                <span style={{ fontSize: '14px', color: '#666', fontWeight: 'bold' }}>
+                  Page {currentPage} of {totalPages}
+                </span>
+                
+                <button 
+                  onClick={handleNextPage} 
+                  disabled={currentPage === totalPages}
+                  style={{ 
+                    padding: '8px 16px', 
+                    backgroundColor: currentPage === totalPages ? '#e5e7eb' : '#3b82f6', 
+                    color: currentPage === totalPages ? '#9ca3af' : 'white', 
+                    border: 'none', borderRadius: '6px', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', fontWeight: 'bold' 
+                  }}
+                >
+                  Next →
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
