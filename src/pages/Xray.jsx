@@ -3,6 +3,7 @@ import { supabase } from '../config/supabase'
 
 export default function Xray() {
   const [queue, setQueue] = useState([])
+  const [searchQueue, setSearchQueue] = useState('') // NEW: Search state
   const [selected, setSelected] = useState(null)
   const [patient, setPatient] = useState(null)
   const [orderedXray, setOrderedXray] = useState('')
@@ -137,6 +138,12 @@ export default function Xray() {
     setLoading(false)
   }
 
+  // NEW: Filter logic for search
+  const filteredQueue = queue.filter(item => 
+    item.patient_id.toLowerCase().includes(searchQueue.toLowerCase()) || 
+    item.xray_name.toLowerCase().includes(searchQueue.toLowerCase())
+  )
+
   const inputStyle = { width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box', marginBottom: '15px' }
   const labelStyle = { display: 'block', marginBottom: '5px', color: '#333', fontWeight: 'bold', fontSize: '14px' }
 
@@ -152,8 +159,31 @@ export default function Xray() {
       <div className="xray-layout" style={{ display: 'flex', gap: '20px', maxWidth: '1200px', margin: '0 auto' }}>
         <div className="xray-queue" style={{ flex: 1, backgroundColor: 'white', padding: '20px', borderRadius: '12px', maxHeight: '80vh', overflowY: 'auto' }}>
           <h2 style={{ color: '#333', marginTop: 0, borderBottom: '2px solid #ec4899', paddingBottom: '10px' }}>🩻 X-Ray Queue</h2>
-          {queue.length === 0 ? <p style={{textAlign: 'center', color: '#666'}}>No patients waiting for X-Ray.</p> : 
-            queue.map((item) => (
+          
+          {/* NEW: Search Bar */}
+          <input 
+            type="text" 
+            placeholder="🔍 Search Patient ID or X-Ray Type..." 
+            value={searchQueue}
+            onChange={(e) => setSearchQueue(e.target.value)}
+            style={{ 
+              width: '100%', 
+              padding: '12px', 
+              border: '1px solid #e5e7eb', 
+              borderRadius: '8px', 
+              marginBottom: '15px', 
+              fontSize: '14px',
+              boxSizing: 'border-box',
+              backgroundColor: '#f9fafb'
+            }}
+          />
+
+          {filteredQueue.length === 0 ? (
+            searchQueue ? 
+              <p style={{textAlign: 'center', color: '#666', padding: '20px'}}>No patients found matching "{searchQueue}"</p> : 
+              <p style={{textAlign: 'center', color: '#666', padding: '20px'}}>No patients waiting for X-Ray.</p>
+          ) : (
+            filteredQueue.map((item) => (
               <div key={item.id} onClick={() => handleSelect(item)} style={{ padding: '15px', marginBottom: '10px', backgroundColor: selected?.id === item.id ? '#fdf2f8' : '#f9fafb', border: `1px solid ${selected?.id === item.id ? '#ec4899' : '#e5e7eb'}`, borderRadius: '8px', cursor: 'pointer' }}>
                 <div style={{ fontWeight: 'bold', fontSize: '16px' }}>ID: {item.patient_id}</div>
                 <div style={{ fontSize: '13px', color: '#9d174d', fontWeight: '600', marginTop: '4px' }}>
@@ -164,7 +194,7 @@ export default function Xray() {
                 </div>
               </div>
             ))
-          }
+          )}
         </div>
 
         <div className="xray-action" style={{ flex: 1.5 }}>

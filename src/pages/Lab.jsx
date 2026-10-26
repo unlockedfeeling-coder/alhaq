@@ -3,6 +3,7 @@ import { supabase } from '../config/supabase'
 
 export default function Lab() {
   const [queue, setQueue] = useState([])
+  const [searchQueue, setSearchQueue] = useState('') // NEW: Search state
   const [selected, setSelected] = useState(null)
   const [patient, setPatient] = useState(null)
   const [orderedTests, setOrderedTests] = useState('')
@@ -119,6 +120,12 @@ export default function Lab() {
     setLoading(false)
   }
 
+  // NEW: Filter logic for search
+  const filteredQueue = queue.filter(item => 
+    item.patient_id.toLowerCase().includes(searchQueue.toLowerCase()) || 
+    item.test_name.toLowerCase().includes(searchQueue.toLowerCase())
+  )
+
   const inputStyle = { width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box', marginBottom: '15px' }
   const labelStyle = { display: 'block', marginBottom: '5px', color: '#333', fontWeight: 'bold', fontSize: '14px' }
 
@@ -134,19 +141,42 @@ export default function Lab() {
       <div className="lab-layout" style={{ display: 'flex', gap: '20px', maxWidth: '1200px', margin: '0 auto' }}>
         <div className="lab-queue" style={{ flex: 1, backgroundColor: 'white', padding: '20px', borderRadius: '12px', maxHeight: '80vh', overflowY: 'auto' }}>
           <h2 style={{ color: '#333', marginTop: 0, borderBottom: '2px solid #3b82f6', paddingBottom: '10px' }}>🧪 Lab Queue</h2>
-          {queue.length === 0 ? <p style={{textAlign: 'center', color: '#666'}}>No patients waiting for lab tests.</p> : 
-            queue.map((item) => (
+          
+          {/* NEW: Search Bar */}
+          <input 
+            type="text" 
+            placeholder="🔍 Search Patient ID or Test Name..." 
+            value={searchQueue}
+            onChange={(e) => setSearchQueue(e.target.value)}
+            style={{ 
+              width: '100%', 
+              padding: '12px', 
+              border: '1px solid #e5e7eb', 
+              borderRadius: '8px', 
+              marginBottom: '15px', 
+              fontSize: '14px',
+              boxSizing: 'border-box',
+              backgroundColor: '#f9fafb'
+            }}
+          />
+
+          {filteredQueue.length === 0 ? (
+            searchQueue ? 
+              <p style={{textAlign: 'center', color: '#666', padding: '20px'}}>No patients found matching "{searchQueue}"</p> : 
+              <p style={{textAlign: 'center', color: '#666', padding: '20px'}}>No patients waiting for lab tests.</p>
+          ) : (
+            filteredQueue.map((item) => (
               <div key={item.id} onClick={() => handleSelect(item)} style={{ padding: '15px', marginBottom: '10px', backgroundColor: selected?.id === item.id ? '#eff6ff' : '#f9fafb', border: `1px solid ${selected?.id === item.id ? '#3b82f6' : '#e5e7eb'}`, borderRadius: '8px', cursor: 'pointer' }}>
                 <div style={{ fontWeight: 'bold', fontSize: '16px' }}>ID: {item.patient_id}</div>
                 <div style={{ fontSize: '13px', color: '#dc2626', fontWeight: '600', marginTop: '4px' }}>
-                   {item.test_name || 'Lab Test'}
+                   🧪 {item.test_name || 'Lab Test'}
                 </div>
                 <div style={{ fontSize: '12px', marginTop: '8px', color: item.lab_paid ? '#16a34a' : '#f59e0b', fontWeight: 'bold' }}>
-                  {item.lab_paid ? '✅ PAID - Ready for Test' : ' Awaiting Payment'}
+                  {item.lab_paid ? '✅ PAID - Ready for Test' : '⏳ Awaiting Payment'}
                 </div>
               </div>
             ))
-          }
+          )}
         </div>
 
         <div className="lab-action" style={{ flex: 1.5 }}>

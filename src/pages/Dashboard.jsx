@@ -13,6 +13,7 @@ import RecoverID from './RecoverID'
 import Inventory from './Inventory'
 import PatientHistory from './PatientHistory'
 import AdminPanel from './AdminPanel'
+import Wards from './Wards'
 
 export default function Dashboard({ userRole, userEmail }) {
   const navigate = useNavigate()
@@ -26,13 +27,13 @@ export default function Dashboard({ userRole, userEmail }) {
     navigate('/login')
   }
 
-  // --- ROLE PERMISSIONS ---
+  // --- ROLE PERMISSIONS (Updated with 'wards') ---
   const rolePermissions = {
-    admin: ['dashboard', 'registration', 'vitals', 'consulting', 'cashier', 'lab', 'xray', 'scan', 'dispensary', 'inventory', 'history', 'recover-id', 'admin-panel'],
+    admin: ['dashboard', 'registration', 'vitals', 'consulting', 'cashier', 'lab', 'xray', 'scan', 'dispensary', 'inventory', 'history', 'recover-id', 'admin-panel', 'wards'],
     registerer: ['dashboard', 'registration', 'recover-id'],
-    nurse: ['dashboard', 'vitals'],
-    doctor: ['dashboard', 'consulting', 'history'],
-    cashier: ['dashboard', 'cashier'],
+    nurse: ['dashboard', 'vitals', 'wards'],
+    doctor: ['dashboard', 'consulting', 'history', 'wards'],
+    cashier: ['dashboard', 'cashier', 'wards'],
     lab: ['dashboard', 'lab'],
     xray: ['dashboard', 'xray'],
     scan: ['dashboard', 'scan'],
@@ -49,7 +50,6 @@ export default function Dashboard({ userRole, userEmail }) {
     } else { setActivePage('dashboard') }
   }, [location, allowedPages, navigate])
 
-  // --- THE FIX: Extracted stats fetching into its own function ---
   const fetchDashboardStats = async () => {
     setLoadingStats(true)
     try {
@@ -98,7 +98,6 @@ export default function Dashboard({ userRole, userEmail }) {
     setLoadingStats(false)
   }
 
-  // Call the function when the page loads or changes
   useEffect(() => {
     if (activePage === 'dashboard') fetchDashboardStats()
   }, [activePage, userRole])
@@ -120,9 +119,8 @@ export default function Dashboard({ userRole, userEmail }) {
                   🖨️ Print Daily Report
                 </button>
               )}
-              {/* FIX: Button now calls fetchDashboardStats directly */}
               <button onClick={fetchDashboardStats} className="no-print" style={{ padding: '8px 15px', backgroundColor: '#e5e7eb', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', color: '#374151' }}>
-                 Refresh Data
+                 🔄 Refresh Data
               </button>
             </div>
           </div>
@@ -139,7 +137,7 @@ export default function Dashboard({ userRole, userEmail }) {
             
             {userRole === 'admin' && (
               <div style={{ background: 'rgba(255, 255, 255, 0.9)', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', borderLeft: '5px solid #f59e0b' }}>
-                <h3 style={{ color: '#666', fontSize: '14px', margin: '0 0 10px 0' }}>💰 Today's Revenue (Admin Only)</h3>
+                <h3 style={{ color: '#666', fontSize: '14px', margin: '0 0 10px 0' }}> Today's Revenue (Admin Only)</h3>
                 <div style={{ fontSize: '42px', fontWeight: 'bold', color: '#f59e0b' }}>{loadingStats ? '...' : `GH₵${stats.revenue.toFixed(2)}`}</div>
               </div>
             )}
@@ -164,6 +162,7 @@ export default function Dashboard({ userRole, userEmail }) {
     else if (activePage === 'history') return <PatientHistory />
     else if (activePage === 'recover-id') return <RecoverID />
     else if (activePage === 'admin-panel') return <AdminPanel />
+    else if (activePage === 'wards') return <Wards />
   }
 
   const isAllowed = (page) => allowedPages.includes(page)
@@ -222,13 +221,14 @@ export default function Dashboard({ userRole, userEmail }) {
             {isAllowed('consulting') && <button onClick={() => handleNavigation('consulting')} style={sidebarButtonStyle(activePage === 'consulting')}>🩺 Consulting</button>}
             {isAllowed('cashier') && <button onClick={() => handleNavigation('cashier')} style={sidebarButtonStyle(activePage === 'cashier')}>💰 Cashier</button>}
             {isAllowed('lab') && <button onClick={() => handleNavigation('lab')} style={sidebarButtonStyle(activePage === 'lab')}> Lab</button>}
-            {isAllowed('xray') && <button onClick={() => handleNavigation('xray')} style={sidebarButtonStyle(activePage === 'xray')}>🩻 X-Ray</button>}
+            {isAllowed('xray') && <button onClick={() => handleNavigation('xray')} style={sidebarButtonStyle(activePage === 'xray')}> X-Ray</button>}
             {isAllowed('scan') && <button onClick={() => handleNavigation('scan')} style={sidebarButtonStyle(activePage === 'scan')}>🔬 Scan</button>}
             {isAllowed('dispensary') && <button onClick={() => handleNavigation('dispensary')} style={sidebarButtonStyle(activePage === 'dispensary')}>🌿 Dispensary</button>}
             {isAllowed('inventory') && <button onClick={() => handleNavigation('inventory')} style={sidebarButtonStyle(activePage === 'inventory')}>💊 Inventory</button>}
+            {isAllowed('wards') && <button onClick={() => handleNavigation('wards')} style={sidebarButtonStyle(activePage === 'wards')}>🏥 Wards & Beds</button>}
             {isAllowed('history') && <button onClick={() => handleNavigation('history')} style={sidebarButtonStyle(activePage === 'history')}>📁 Patient Records</button>}
             {isAllowed('recover-id') && <button onClick={() => handleNavigation('recover-id')} style={sidebarButtonStyle(activePage === 'recover-id')}>🔍 Recover ID</button>}
-            {isAllowed('admin-panel') && <button onClick={() => handleNavigation('admin-panel')} style={sidebarButtonStyle(activePage === 'admin-panel')}>🛡️ Admin Panel</button>}
+            {isAllowed('admin-panel') && <button onClick={() => handleNavigation('admin-panel')} style={sidebarButtonStyle(activePage === 'admin-panel')}>️ Admin Panel</button>}
           </nav>
 
           <div style={{ padding: '20px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>

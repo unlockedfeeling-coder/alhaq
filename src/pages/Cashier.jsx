@@ -3,12 +3,14 @@ import { supabase } from '../config/supabase'
 
 export default function Cashier() {
   const [queue, setQueue] = useState([])
+  const [searchQueue, setSearchQueue] = useState('') // NEW: Search state for queue
   const [selected, setSelected] = useState(null)
   const [patient, setPatient] = useState(null)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   
   const [history, setHistory] = useState([])
+  const [searchHistory, setSearchHistory] = useState('') // NEW: Search state for history
   const [cashierName, setCashierName] = useState('Loading...')
   
   const [showReceipt, setShowReceipt] = useState(false)
@@ -45,8 +47,8 @@ export default function Cashier() {
   const handleSelectPatient = async (consultation) => {
     setSelected(consultation)
     setMessage('')
-    const { data } = await supabase.from('patients').select('first_name, last_name, patient_id').eq('patient_id', consultation.patient_id).single()
-    setPatient(data)
+    const { data } = await supabase.from('patients').select('first_name, last_name, patient_id').eq('patient_id', consultation.patient_id).limit(1)
+    if (data && data.length > 0) setPatient(data[0])
   }
 
   const handleConfirmPayment = async (method) => {
@@ -99,43 +101,37 @@ export default function Cashier() {
       setShowReceipt(true)
       
       setSelected(null); setPatient(null); fetchQueue(); fetchHistory() 
-    } catch (err) { setMessage('❌ Error: ' + err.message) }
+    } catch (err) { setMessage(' Error: ' + err.message) }
     setLoading(false)
   }
 
   const handlePrint = () => { window.print() }
 
+  // Filter logic for Queue
+  const filteredQueue = queue.filter(item => 
+    item.patient_id.toLowerCase().includes(searchQueue.toLowerCase())
+  )
+
+  // Filter logic for History
+  const filteredHistory = history.filter(item => 
+    item.patient_name?.toLowerCase().includes(searchHistory.toLowerCase()) || 
+    item.patient_id?.toLowerCase().includes(searchHistory.toLowerCase()) ||
+    item.receipt_number?.toLowerCase().includes(searchHistory.toLowerCase())
+  )
+
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-      {/* BULLETPROOF PRINT CSS */}
       <style>{`
         @media print {
-          body * {
-            visibility: hidden;
-          }
-          #printable-receipt,
-          #printable-receipt * {
-            visibility: visible;
-          }
-          #printable-receipt {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            max-width: 400px;
-            margin: 0 auto;
-            padding: 20px;
-            background: white;
-            box-shadow: none;
-            border: none;
-          }
-          .no-print {
-            display: none !important;
-          }
-          @page {
-            margin: 0;
-            size: auto;
-          }
+          body * { visibility: hidden; }
+          #printable-receipt, #printable-receipt * { visibility: visible; }
+          #printable-receipt { position: absolute; left: 0; top: 0; width: 100%; max-width: 400px; margin: 0 auto; }
+          .no-print { display: none !important; }
+        }
+        @media (max-width: 768px) {
+          .cashier-layout { flex-direction: column !important; }
+          .cashier-queue, .cashier-action { width: 100% !important; max-height: none !important; }
+          .history-table { display: block; overflow-x: auto; }
         }
       `}</style>
 
@@ -152,9 +148,21 @@ export default function Cashier() {
 
       <div className="no-print cashier-layout" style={{ display: 'flex', gap: '20px', marginBottom: '30px' }}>
         <div className="cashier-queue" style={{ flex: 1, backgroundColor: 'white', padding: '20px', borderRadius: '12px', maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
-          <h3 style={{ color: '#333', marginTop: 0, borderBottom: '2px solid #f59e0b', paddingBottom: '10px' }}>Pending Service Payments</h3>
-          {queue.length === 0 ? <p style={{textAlign: 'center', color: '#666'}}>No patients waiting.</p> : 
-            queue.map((item) => (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '2px solid #f59e0b', paddingBottom: '10px' }}>
+            <h3 style={{ color: '#333', margin: 0 }}>Pending Payments</h3>
+          </div>
+          
+          {/* NEW: Queue Search Bar */}
+          <input 
+            type="text" 
+            placeholder="🔍 Search Patient ID in queue..." 
+            value={searchQueue}
+            onChange={(e) => setSearchQueue(e.target.value)}
+            style={{ width: '100%', padding: '10px', border: '1px solid #e5e7eb', borderRadius: '6px', marginBottom: '15px', fontSize: '14px', boxSizing: 'border-box' }}
+          />
+
+          {filteredQueue.length === 0 ? <p style={{textAlign: 'center', color: '#666'}}>No patients waiting.</p> : 
+            filteredQueue.map((item) => (
               <div key={item.id} onClick={() => handleSelectPatient(item)} style={{ padding: '15px', marginBottom: '10px', backgroundColor: selected?.id === item.id ? '#fffbeb' : '#f9fafb', border: `1px solid ${selected?.id === item.id ? '#f59e0b' : '#e5e7eb'}`, borderRadius: '8px', cursor: 'pointer' }}>
                 <div style={{ fontWeight: 'bold' }}>ID: {item.patient_id}</div>
                 <div style={{ fontSize: '13px', color: '#666', marginTop: '5px' }}>
@@ -174,20 +182,20 @@ export default function Cashier() {
               </div>
 
               <div style={{ marginBottom: '20px' }}>
-                <h4 style={{ color: '#333', marginBottom: '15px' }}>🧾 Bill Summary:</h4>
+                <h4 style={{ color: '#333', marginBottom: '15px' }}> Bill Summary:</h4>
                 
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid #eee' }}>
                   <span style={{ fontWeight: 'bold' }}>🧪 Lab Fees:</span>
-                  <span style={{ fontSize: '16px' }}>GH{Number(selected.lab_fee || 0).toFixed(2)}</span>
+                  <span style={{ fontSize: '16px' }}>GH₵{Number(selected.lab_fee || 0).toFixed(2)}</span>
                 </div>
                 
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid #eee' }}>
-                  <span style={{ fontWeight: 'bold' }}> X-Ray / Scan Fees:</span>
+                  <span style={{ fontWeight: 'bold' }}>🩻 X-Ray / Scan Fees:</span>
                   <span style={{ fontSize: '16px' }}>GH₵{Number(selected.radiology_fee || 0).toFixed(2)}</span>
                 </div>
                 
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid #eee' }}>
-                  <span style={{ fontWeight: 'bold' }}>🌿 Dispensary / Herbs:</span>
+                  <span style={{ fontWeight: 'bold' }}> Dispensary / Herbs:</span>
                   <span style={{ fontSize: '16px' }}>GH₵{Number(selected.dispensary_fee || 0).toFixed(2)}</span>
                 </div>
                 
@@ -202,7 +210,7 @@ export default function Cashier() {
               <h4 style={{ color: '#333', marginBottom: '10px' }}>Select Payment Method:</h4>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                 <button onClick={() => handleConfirmPayment('Cash')} disabled={loading} style={{ padding: '15px', backgroundColor: '#16a34a', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>💵 Cash</button>
-                <button onClick={() => handleConfirmPayment('Mobile Money')} disabled={loading} style={{ padding: '15px', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>📱 Mobile Money</button>
+                <button onClick={() => handleConfirmPayment('Mobile Money')} disabled={loading} style={{ padding: '15px', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>📱 MoMo</button>
                 <button onClick={() => handleConfirmPayment('Card')} disabled={loading} style={{ padding: '15px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>💳 Card</button>
               </div>
             </div>
@@ -223,8 +231,17 @@ export default function Cashier() {
           </button>
         </div>
         
-        {history.length === 0 ? (
-          <p style={{textAlign: 'center', color: '#666', padding: '20px'}}>No transactions yet.</p>
+        {/* NEW: History Search Bar */}
+        <input 
+          type="text" 
+          placeholder="🔍 Search history by Name, ID, or Receipt #..." 
+          value={searchHistory}
+          onChange={(e) => setSearchHistory(e.target.value)}
+          style={{ width: '100%', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '6px', marginBottom: '20px', fontSize: '14px', boxSizing: 'border-box' }}
+        />
+
+        {filteredHistory.length === 0 ? (
+          <p style={{textAlign: 'center', color: '#666', padding: '20px'}}>No transactions found.</p>
         ) : (
           <div className="history-table" style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
@@ -241,7 +258,7 @@ export default function Cashier() {
                 </tr>
               </thead>
               <tbody>
-                {history.map((rec) => (
+                {filteredHistory.map((rec) => (
                   <tr key={rec.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
                     <td style={tdStyle}><strong style={{color: '#3b82f6'}}>{rec.receipt_number}</strong></td>
                     <td style={tdStyle}>{new Date(rec.created_at).toLocaleString()}</td>
@@ -250,9 +267,9 @@ export default function Cashier() {
                     <td style={tdStyle}>
                       <div style={{ fontSize: '12px' }}>
                         {rec.lab_fee > 0 && <div>🧪 Lab: GH₵{Number(rec.lab_fee).toFixed(2)}</div>}
-                        {rec.radiology_fee > 0 && <div> X-Ray/Scan: GH₵{Number(rec.radiology_fee).toFixed(2)}</div>}
+                        {rec.radiology_fee > 0 && <div>🩻 X-Ray/Scan: GH{Number(rec.radiology_fee).toFixed(2)}</div>}
                         {rec.dispensary_fee > 0 && <div>🌿 Herbs: GH₵{Number(rec.dispensary_fee).toFixed(2)}</div>}
-                        {rec.description && <div> {rec.description}</div>}
+                        {rec.description && <div>📁 {rec.description}</div>}
                       </div>
                     </td>
                     <td style={tdStyle}><strong style={{color: '#16a34a', fontSize: '15px'}}>GH₵{Number(rec.total_amount).toFixed(2)}</strong></td>
@@ -268,7 +285,7 @@ export default function Cashier() {
                         {rec.payment_method}
                       </span>
                     </td>
-                    <td style={tdStyle}><span style={{ fontSize: '12px', color: '#666' }}>👤 {rec.cashier_name || 'Unknown'}</span></td>
+                    <td style={tdStyle}><span style={{ fontSize: '12px', color: '#666' }}> {rec.cashier_name || 'Unknown'}</span></td>
                   </tr>
                 ))}
               </tbody>
@@ -277,13 +294,11 @@ export default function Cashier() {
         )}
       </div>
 
-      {/* RECEIPT MODAL - FIXED PRINT LAYOUT */}
+      {/* RECEIPT MODAL */}
       {showReceipt && receiptData && (
-        /* REMOVED no-print FROM THIS OUTER DIV SO THE RECEIPT CAN PRINT */
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+        <div className="no-print" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
           <div id="printable-receipt" style={{ backgroundColor: 'white', padding: '30px', borderRadius: '8px', maxWidth: '380px', width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
             
-            {/* HEADER */}
             <div style={{ textAlign: 'center', borderBottom: '2px solid #333', paddingBottom: '15px', marginBottom: '15px' }}>
               <h3 style={{ margin: 0, color: '#333', fontSize: '14px', letterSpacing: '1.5px', fontWeight: 'bold' }}>DG SECURITY SYSTEMS</h3>
               <h2 style={{ margin: '8px 0 5px 0', color: '#16a34a', fontSize: '20px' }}>🌿 Al-Haq Herbal Centre</h2>
@@ -301,7 +316,7 @@ export default function Cashier() {
             <div style={{ borderTop: '1px dashed #ccc', paddingTop: '10px', marginBottom: '15px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '5px', fontWeight: 'bold' }}>
                 <span>{receiptData.service_description || receiptData.description || 'Services Rendered'}</span>
-                <span>GH₵{Number(receiptData.total_amount).toFixed(2)}</span>
+                <span>GH{Number(receiptData.total_amount).toFixed(2)}</span>
               </div>
               
               {receiptData.lab_fee > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#666', marginLeft: '10px' }}><span>- Lab Fees</span><span>GH₵{Number(receiptData.lab_fee).toFixed(2)}</span></div>}
@@ -314,14 +329,12 @@ export default function Cashier() {
               <span style={{ color: '#16a34a' }}>GH₵{Number(receiptData.total_amount).toFixed(2)}</span>
             </div>
 
-            {/* FOOTER */}
             <div style={{ textAlign: 'center', fontSize: '12px', color: '#666', borderTop: '2px dashed #ccc', paddingTop: '15px', marginTop: '15px' }}>
               <p style={{ margin: 0 }}>Payment Method: <strong>{receiptData.payment_method}</strong></p>
               <p style={{ margin: '10px 0 0 0', fontWeight: 'bold', color: '#333' }}>Thank you for choosing Al-Haq! 🌿</p>
               <p style={{ margin: '15px 0 0 0', fontSize: '10px', color: '#999', letterSpacing: '0.5px' }}>Software is powered and supported by DG Security Systems</p>
             </div>
 
-            {/* BUTTONS - KEPT no-print HERE SO THEY DON'T PRINT */}
             <div style={{ display: 'flex', gap: '10px', marginTop: '25px' }} className="no-print">
               <button onClick={handlePrint} style={{ flex: 1, padding: '12px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>🖨️ Print Receipt</button>
               <button onClick={() => setShowReceipt(false)} style={{ flex: 1, padding: '12px', backgroundColor: '#e5e7eb', color: '#333', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Close</button>

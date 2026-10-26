@@ -10,9 +10,10 @@ export default function Inventory() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
+  const [typeFilter, setTypeFilter] = useState('All') // NEW: Filter by Herbal/Chemical
   
   const [formData, setFormData] = useState({
-    name: '', herbal_type: 'Powder', category: 'General', quantity_in_stock: 0,
+    name: '', drug_type: 'Herbal', herbal_type: 'Powder', category: 'General', quantity_in_stock: 0,
     unit: 'bottles', reorder_level: 5, unit_price: 0, expiry_date: '',
     batch_number: '', supplier: '', description: ''
   })
@@ -23,7 +24,6 @@ export default function Inventory() {
 
   const fetchMedications = async () => {
     setLoading(true)
-    // Added error checking here
     const { data, error } = await supabase.from('medications').select('*').order('name')
     if (error) {
       console.error("Fetch Error:", error)
@@ -34,7 +34,19 @@ export default function Inventory() {
     setLoading(false)
   }
 
-  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value })
+  const handleChange = (e) => {
+    const { name, value } = e.target
+    setFormData(prev => {
+      const updated = { ...prev, [name]: value }
+      // Reset form type when drug type changes
+      if (name === 'drug_type') {
+        updated.herbal_type = value === 'Herbal' ? 'Powder' : 'Tablet'
+        updated.unit = value === 'Herbal' ? 'bottles' : 'boxes'
+      }
+      return updated
+    })
+  }
+  
   const handleRestockChange = (e) => setRestockData({ ...restockData, [e.target.name]: e.target.value })
 
   const totalItems = medications.length
@@ -46,9 +58,9 @@ export default function Inventory() {
   const expiringSoonCount = medications.filter(m => m.expiry_date && new Date(m.expiry_date) <= thirtyDaysFromNow).length
 
   const handleExportCSV = () => {
-    const headers = ['Name', 'Category', 'Stock', 'Unit', 'Price', 'Total Value', 'Expiry Date', 'Supplier', 'Batch No']
+    const headers = ['Name', 'Type', 'Category', 'Stock', 'Unit', 'Price', 'Total Value', 'Expiry Date', 'Supplier', 'Batch No']
     const rows = medications.map(m => [
-      m.name, m.category, m.quantity_in_stock, m.unit, m.unit_price, 
+      m.name, m.drug_type || 'Herbal', m.category, m.quantity_in_stock, m.unit, m.unit_price, 
       (m.quantity_in_stock * m.unit_price).toFixed(2), m.expiry_date || 'N/A', m.supplier || 'N/A', m.batch_number || 'N/A'
     ])
     
@@ -67,7 +79,10 @@ export default function Inventory() {
 
   const handleAddNew = () => {
     setEditingMed(null)
-    setFormData({ name: '', herbal_type: 'Powder', category: 'General', quantity_in_stock: 0, unit: 'bottles', reorder_level: 5, unit_price: 0, expiry_date: '', batch_number: '', supplier: '', description: '' })
+    setFormData({ 
+      name: '', drug_type: 'Herbal', herbal_type: 'Powder', category: 'General', quantity_in_stock: 0, 
+      unit: 'bottles', reorder_level: 5, unit_price: 0, expiry_date: '', batch_number: '', supplier: '', description: '' 
+    })
     setShowAddModal(true)
   }
 
@@ -92,9 +107,9 @@ export default function Inventory() {
         setMessage('✅ Medication added!')
       }
       setShowAddModal(false)
-      fetchMedications() // Refresh the list
+      fetchMedications()
     } catch (err) { 
-      setMessage(' Error: ' + err.message) 
+      setMessage('❌ Error: ' + err.message) 
       console.error(err)
     }
     setLoading(false)
@@ -133,7 +148,7 @@ export default function Inventory() {
     try {
       const { error } = await supabase.from('medications').delete().eq('id', id)
       if (error) throw error
-      setMessage('✅ Deleted!')
+      setMessage('🗑️ Deleted!')
       fetchMedications()
     } catch (err) { setMessage('❌ Error: ' + err.message) }
     setLoading(false)
@@ -141,28 +156,40 @@ export default function Inventory() {
 
   const inputStyle = { width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box', marginBottom: '12px' }
   const labelStyle = { display: 'block', marginBottom: '5px', color: '#333', fontWeight: 'bold', fontSize: '14px' }
-  const filteredMeds = medications.filter(med => med.name.toLowerCase().includes(searchTerm.toLowerCase()) || med.category?.toLowerCase().includes(searchTerm.toLowerCase()))
+  
+  // NEW: Filter by both search term and drug type
+  const filteredMeds = medications.filter(med => {
+    const matchesSearch = med.name.toLowerCase().includes(searchTerm.toLowerCase()) || med.category?.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesType = typeFilter === 'All' || med.drug_type === typeFilter
+    return matchesSearch && matchesType
+  })
+
+  const thStyle = { padding: '12px', textAlign: 'left', borderBottom: '2px solid #e5e7eb', fontSize: '14px', color: '#666' }
+  const tdStyle = { padding: '12px', fontSize: '14px' }
+  const actionBtnStyle = (color) => ({ padding: '6px 12px', backgroundColor: color, color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', marginRight: '5px', fontSize: '12px', fontWeight: 'bold' })
+  const modalOverlay = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }
+  const modalContent = { backgroundColor: 'white', padding: '30px', borderRadius: '12px', maxWidth: '600px', width: '90%', maxHeight: '85vh', overflowY: 'auto' }
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2 style={{ color: '#333', margin: 0 }}> Inventory Management</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
+        <h2 style={{ color: '#333', margin: 0 }}>💊 Inventory Management</h2>
         <div style={{ display: 'flex', gap: '10px' }}>
           <button onClick={handleExportCSV} style={{ padding: '10px 20px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>📥 Export to Excel</button>
           <button onClick={handleAddNew} style={{ padding: '10px 20px', backgroundColor: '#16a34a', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>+ Add Medication</button>
         </div>
       </div>
 
-      {message && <div style={{ backgroundColor: message.includes('✅') ? '#dcfce7' : '#fee2e2', color: message.includes('✅') ? '#166534' : '#991b1b', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{message}</div>}
+      {message && <div style={{ backgroundColor: message.includes('✅') || message.includes('🗑️') ? '#dcfce7' : '#fee2e2', color: message.includes('✅') || message.includes('🗑️') ? '#166534' : '#991b1b', padding: '12px', borderRadius: '8px', marginBottom: '20px', fontWeight: 'bold' }}>{message}</div>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', marginBottom: '25px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '25px' }}>
         <div style={{ background: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', borderLeft: '5px solid #3b82f6' }}>
           <div style={{ color: '#666', fontSize: '13px' }}>Total Items</div>
           <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#3b82f6' }}>{totalItems}</div>
         </div>
         <div style={{ background: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', borderLeft: '5px solid #16a34a' }}>
           <div style={{ color: '#666', fontSize: '13px' }}>Total Stock Value</div>
-          <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#16a34a' }}>${totalValue.toFixed(2)}</div>
+          <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#16a34a' }}>GH₵ {totalValue.toFixed(2)}</div>
         </div>
         <div style={{ background: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', borderLeft: '5px solid #f59e0b' }}>
           <div style={{ color: '#666', fontSize: '13px' }}>Low Stock Alert</div>
@@ -174,7 +201,14 @@ export default function Inventory() {
         </div>
       </div>
 
-      <input type="text" placeholder="Search inventory..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, maxWidth: '400px', marginBottom: '20px' }} />
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
+        <input type="text" placeholder="Search by name or category..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ ...inputStyle, maxWidth: '400px', marginBottom: 0, flex: 1 }} />
+        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ ...inputStyle, maxWidth: '200px', marginBottom: 0 }}>
+          <option value="All">All Types</option>
+          <option value="Herbal">🌿 Herbal Only</option>
+          <option value="Chemical">💊 Chemical Only</option>
+        </select>
+      </div>
 
       <div style={{ backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
@@ -192,14 +226,19 @@ export default function Inventory() {
           <tbody>
             {filteredMeds.map((med) => (
               <tr key={med.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                <td style={tdStyle}><div style={{ fontWeight: 'bold' }}>{med.name}</div><div style={{ fontSize: '12px', color: '#666' }}>{med.herb_type}</div></td>
+                <td style={tdStyle}>
+                  <div style={{ fontWeight: 'bold' }}>
+                    {med.drug_type === 'Chemical' ? '💊' : '🌿'} {med.name}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#666' }}>{med.herbal_type}</div>
+                </td>
                 <td style={tdStyle}>{med.category}</td>
                 <td style={tdStyle}>
                   <span style={{ backgroundColor: med.quantity_in_stock <= med.reorder_level ? '#fee2e2' : '#dcfce7', color: med.quantity_in_stock <= med.reorder_level ? '#991b1b' : '#166534', padding: '4px 8px', borderRadius: '4px', fontWeight: 'bold', fontSize: '13px' }}>
                     {med.quantity_in_stock} {med.unit}
                   </span>
                 </td>
-                <td style={tdStyle}>${med.unit_price}</td>
+                <td style={tdStyle}>GH₵ {med.unit_price}</td>
                 <td style={tdStyle}>{med.expiry_date ? new Date(med.expiry_date).toLocaleDateString() : 'N/A'}</td>
                 <td style={tdStyle}><div style={{fontSize: '13px'}}>{med.supplier || '-'}</div><div style={{fontSize: '11px', color: '#666'}}>{med.batch_number || ''}</div></td>
                 <td style={tdStyle}>
@@ -221,25 +260,65 @@ export default function Inventory() {
             <form onSubmit={handleSave}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                 <div><label style={labelStyle}>Name *</label><input name="name" value={formData.name} onChange={handleChange} style={inputStyle} required /></div>
+                
+                {/* NEW: Drug Type Selector */}
+                <div>
+                  <label style={labelStyle}>Drug Type *</label>
+                  <select name="drug_type" value={formData.drug_type} onChange={handleChange} style={inputStyle}>
+                    <option value="Herbal">🌿 Herbal</option>
+                    <option value="Chemical">💊 Chemical</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Form / Type</label>
+                  <select name="herbal_type" value={formData.herbal_type} onChange={handleChange} style={inputStyle}>
+                    {formData.drug_type === 'Herbal' ? (
+                      <>
+                        <option value="Powder">Powder</option>
+                        <option value="Capsule">Capsule</option>
+                        <option value="Tea">Tea</option>
+                        <option value="Gel">Gel</option>
+                        <option value="Oil">Oil</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="Tablet">Tablet</option>
+                        <option value="Syrup">Syrup</option>
+                        <option value="Injection">Injection</option>
+                        <option value="Cream">Cream</option>
+                        <option value="Drops">Drops</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+
                 <div><label style={labelStyle}>Category</label>
                   <select name="category" value={formData.category} onChange={handleChange} style={inputStyle}>
-                    <option value="General">General</option><option value="Detox">Detox</option><option value="Immunity">Immunity</option><option value="Digestion">Digestion</option><option value="Skin Care">Skin Care</option><option value="Respiratory">Respiratory</option>
+                    <option value="General">General</option>
+                    <option value="Pain Relief">Pain Relief</option>
+                    <option value="Antibiotic">Antibiotic</option>
+                    <option value="Detox">Detox</option>
+                    <option value="Immunity">Immunity</option>
+                    <option value="Digestion">Digestion</option>
+                    <option value="Skin Care">Skin Care</option>
+                    <option value="Respiratory">Respiratory</option>
                   </select>
                 </div>
-                <div><label style={labelStyle}>Type</label>
-                  {/* FIXED: Changed herb_type to herbal_type */}
-                  <select name="herbal_type" value={formData.herbal_type} onChange={handleChange} style={inputStyle}>
-                    <option value="Powder">Powder</option><option value="Capsule">Capsule</option><option value="Tea">Tea</option><option value="Gel">Gel</option><option value="Oil">Oil</option>
-                  </select>
-                </div>
+
                 <div><label style={labelStyle}>Unit</label>
                   <select name="unit" value={formData.unit} onChange={handleChange} style={inputStyle}>
-                    <option value="bottles">Bottles</option><option value="packets">Packets</option><option value="boxes">Boxes</option><option value="jars">Jars</option>
+                    <option value="bottles">Bottles</option>
+                    <option value="boxes">Boxes</option>
+                    <option value="packets">Packets</option>
+                    <option value="jars">Jars</option>
+                    <option value="strips">Strips</option>
+                    <option value="vials">Vials</option>
                   </select>
                 </div>
                 <div><label style={labelStyle}>Initial Stock</label><input type="number" name="quantity_in_stock" value={formData.quantity_in_stock} onChange={handleChange} style={inputStyle} /></div>
                 <div><label style={labelStyle}>Reorder Level</label><input type="number" name="reorder_level" value={formData.reorder_level} onChange={handleChange} style={inputStyle} /></div>
-                <div><label style={labelStyle}>Unit Price ($)</label><input type="number" step="0.01" name="unit_price" value={formData.unit_price} onChange={handleChange} style={inputStyle} required /></div>
+                <div><label style={labelStyle}>Unit Price (GH₵)</label><input type="number" step="0.01" name="unit_price" value={formData.unit_price} onChange={handleChange} style={inputStyle} required /></div>
                 <div><label style={labelStyle}>Expiry Date</label><input type="date" name="expiry_date" value={formData.expiry_date} onChange={handleChange} style={inputStyle} /></div>
               </div>
               <div><label style={labelStyle}>Supplier</label><input name="supplier" value={formData.supplier} onChange={handleChange} style={inputStyle} /></div>
@@ -274,9 +353,3 @@ export default function Inventory() {
     </div>
   )
 }
-
-const thStyle = { padding: '12px', textAlign: 'left', borderBottom: '2px solid #e5e7eb', fontSize: '14px', color: '#666' }
-const tdStyle = { padding: '12px', fontSize: '14px' }
-const actionBtnStyle = (color) => ({ padding: '6px 12px', backgroundColor: color, color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', marginRight: '5px', fontSize: '12px', fontWeight: 'bold' })
-const modalOverlay = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }
-const modalContent = { backgroundColor: 'white', padding: '30px', borderRadius: '12px', maxWidth: '600px', width: '90%', maxHeight: '85vh', overflowY: 'auto' }

@@ -3,6 +3,7 @@ import { supabase } from '../config/supabase'
 
 export default function Scan() {
   const [queue, setQueue] = useState([])
+  const [searchQueue, setSearchQueue] = useState('')
   const [selected, setSelected] = useState(null)
   const [patient, setPatient] = useState(null)
   const [orderedScan, setOrderedScan] = useState('')
@@ -23,7 +24,6 @@ export default function Scan() {
         .eq('radiology_completed', false)
         .order('created_at', { ascending: false })
       
-      // Fetch Scan names for each patient in the queue
       const queueWithScan = await Promise.all(
         (data || []).map(async (item) => {
           const { data: services } = await supabase
@@ -31,7 +31,6 @@ export default function Scan() {
             .select('medical_services(name, category)')
             .eq('consultation_id', item.id)
           
-          // Try multiple possible category names
           let scanService = services?.find(s => 
             s.medical_services.category === 'Scan' || 
             s.medical_services.category === 'Ultrasound' ||
@@ -39,28 +38,20 @@ export default function Scan() {
             s.medical_services.category === 'Radiology'
           )
           
-          // Fallback: If no specific category found, get the last service that isn't Lab or X-Ray
           if (!scanService && services && services.length > 0) {
-            scanService = services.find(s => 
-              s.medical_services.category !== 'Lab' && 
-              s.medical_services.category !== 'X-Ray'
-            )
+            scanService = services.find(s => s.medical_services.category !== 'Lab' && s.medical_services.category !== 'X-Ray')
           }
           
           const scanName = scanService ? scanService.medical_services.name : 'General Scan'
-          
           return { ...item, scan_name: scanName }
         })
       )
       
       setQueue(queueWithScan)
-    } catch (err) { 
-      console.error("Error fetching scan queue:", err) 
-    }
+    } catch (err) { console.error("Error fetching scan queue:", err) }
     setLoading(false)
   }
 
-  // BULLETPROOF PATIENT FETCH
   const handleSelect = async (item) => {
     setSelected(item)
     setMessage('')
@@ -69,7 +60,6 @@ export default function Scan() {
     setOrderedScan(item.scan_name || '')
 
     try {
-      // FIX: Use limit(1) instead of single() to prevent crashes
       const { data, error } = await supabase
         .from('patients')
         .select('first_name, last_name')
@@ -77,19 +67,9 @@ export default function Scan() {
         .limit(1)
 
       if (error) throw error
-
-      if (!data || data.length === 0) {
-        setMessage('❌ Patient details not found.')
-        setPatient(null)
-        return
-      }
-
+      if (!data || data.length === 0) { setMessage('❌ Patient details not found.'); setPatient(null); return }
       setPatient(data[0])
-    } catch (err) {
-      console.error('Error fetching patient:', err)
-      setMessage('❌ Error loading patient details.')
-      setPatient(null)
-    }
+    } catch (err) { console.error('Error fetching patient:', err); setMessage('❌ Error loading patient details.'); setPatient(null) }
   }
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value })
@@ -99,15 +79,9 @@ export default function Scan() {
     if (!selected) return
     setLoading(true)
     try {
-      await supabase.from('consultations').update({
-        sent_to_cashier: true,
-        status: 'scan_awaiting_payment'
-      }).eq('id', selected.id)
-
+      await supabase.from('consultations').update({ sent_to_cashier: true, status: 'scan_awaiting_payment' }).eq('id', selected.id)
       setMessage('✅ Patient sent to Cashier for payment. Once paid, they can return for Scan.')
-      setSelected(null)
-      setPatient(null)
-      fetchQueue()
+      setSelected(null); setPatient(null); fetchQueue()
     } catch (err) { setMessage('❌ Error: ' + err.message) }
     setLoading(false)
   }
@@ -132,27 +106,19 @@ export default function Scan() {
     }
 
     try {
-      await supabase.from('imaging_results').insert([{ 
-        consultation_id: selected.id, 
-        patient_id: selected.patient_id, 
-        imaging_type: orderedScan, 
-        body_part: formData.body_part,
-        findings: formData.findings,
-        image_link: finalImageUrl 
-      }])
-      
-      await supabase.from('consultations').update({ 
-        radiology_completed: true,
-        status: 'scan_done_return_to_doctor'
-      }).eq('id', selected.id)
-
+      await supabase.from('imaging_results').insert([{ consultation_id: selected.id, patient_id: selected.patient_id, imaging_type: orderedScan, body_part: formData.body_part, findings: formData.findings, image_link: finalImageUrl }])
+      await supabase.from('consultations').update({ radiology_completed: true, status: 'scan_done_return_to_doctor' }).eq('id', selected.id)
       setMessage('✅ Scan completed! Results sent back to Doctor.')
-      setSelected(null)
-      setPatient(null)
-      fetchQueue()
+      setSelected(null); setPatient(null); fetchQueue()
     } catch (err) { setMessage('❌ Error: ' + err.message) }
     setLoading(false)
   }
+
+  // Filter logic for search
+  const filteredQueue = queue.filter(item => 
+    item.patient_id.toLowerCase().includes(searchQueue.toLowerCase()) || 
+    item.scan_name.toLowerCase().includes(searchQueue.toLowerCase())
+  )
 
   const inputStyle = { width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box', marginBottom: '15px' }
   const labelStyle = { display: 'block', marginBottom: '5px', color: '#333', fontWeight: 'bold', fontSize: '14px' }
@@ -168,20 +134,41 @@ export default function Scan() {
 
       <div className="scan-layout" style={{ display: 'flex', gap: '20px', maxWidth: '1200px', margin: '0 auto' }}>
         <div className="scan-queue" style={{ flex: 1, backgroundColor: 'white', padding: '20px', borderRadius: '12px', maxHeight: '80vh', overflowY: 'auto' }}>
-          <h2 style={{ color: '#333', marginTop: 0, borderBottom: '2px solid #8b5cf6', paddingBottom: '10px' }}>🔬 Scan Queue</h2>
-          {queue.length === 0 ? <p style={{textAlign: 'center', color: '#666'}}>No patients waiting for Scan.</p> : 
-            queue.map((item) => (
+          <h2 style={{ color: '#333', marginTop: 0, borderBottom: '2px solid #8b5cf6', paddingBottom: '10px' }}> Scan Queue</h2>
+          
+          {/* SEARCH BAR - THIS IS THE KEY PART */}
+          <input 
+            type="text" 
+            placeholder="🔍 Search Patient ID or Scan Type..." 
+            value={searchQueue}
+            onChange={(e) => setSearchQueue(e.target.value)}
+            style={{ 
+              width: '100%', 
+              padding: '12px', 
+              border: '1px solid #e5e7eb', 
+              borderRadius: '8px', 
+              marginBottom: '15px', 
+              fontSize: '14px',
+              boxSizing: 'border-box',
+              backgroundColor: '#f9fafb'
+            }}
+          />
+
+          {filteredQueue.length === 0 ? (
+            searchQueue ? 
+              <p style={{textAlign: 'center', color: '#666', padding: '20px'}}>No patients found matching "{searchQueue}"</p> : 
+              <p style={{textAlign: 'center', color: '#666', padding: '20px'}}>No patients waiting for Scan.</p>
+          ) : (
+            filteredQueue.map((item) => (
               <div key={item.id} onClick={() => handleSelect(item)} style={{ padding: '15px', marginBottom: '10px', backgroundColor: selected?.id === item.id ? '#f5f3ff' : '#f9fafb', border: `1px solid ${selected?.id === item.id ? '#8b5cf6' : '#e5e7eb'}`, borderRadius: '8px', cursor: 'pointer' }}>
                 <div style={{ fontWeight: 'bold', fontSize: '16px' }}>ID: {item.patient_id}</div>
-                <div style={{ fontSize: '13px', color: '#7c3aed', fontWeight: '600', marginTop: '4px' }}>
-                  🔬 {item.scan_name || 'Scan'}
-                </div>
+                <div style={{ fontSize: '13px', color: '#7c3aed', fontWeight: '600', marginTop: '4px' }}> {item.scan_name || 'Scan'}</div>
                 <div style={{ fontSize: '12px', marginTop: '8px', color: item.radiology_paid ? '#16a34a' : '#f59e0b', fontWeight: 'bold' }}>
-                  {item.radiology_paid ? '✅ PAID - Ready for Scan' : '⏳ Awaiting Payment'}
+                  {item.radiology_paid ? '✅ PAID - Ready for Scan' : ' Awaiting Payment'}
                 </div>
               </div>
             ))
-          }
+          )}
         </div>
 
         <div className="scan-action" style={{ flex: 1.5 }}>
@@ -204,11 +191,7 @@ export default function Scan() {
               )}
 
               {!selected.radiology_paid ? (
-                <button 
-                  onClick={handleSendToCashier} 
-                  disabled={loading} 
-                  style={{ width: '100%', padding: '15px', backgroundColor: loading ? '#9ca3af' : '#f59e0b', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginBottom: '20px' }}
-                >
+                <button onClick={handleSendToCashier} disabled={loading} style={{ width: '100%', padding: '15px', backgroundColor: loading ? '#9ca3af' : '#f59e0b', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', marginBottom: '20px' }}>
                   {loading ? 'Processing...' : '💰 Send Patient to Cashier for Payment'}
                 </button>
               ) : (
@@ -217,8 +200,7 @@ export default function Scan() {
                   <form onSubmit={handleSave}>
                     <div><label style={labelStyle}>Body Part *</label><input name="body_part" value={formData.body_part} onChange={handleChange} style={inputStyle} required placeholder="e.g. Abdomen, Pelvis" /></div>
                     <div><label style={labelStyle}>Findings / Report *</label><textarea name="findings" value={formData.findings} onChange={handleChange} style={{ ...inputStyle, minHeight: '100px' }} required></textarea></div>
-                    <div><label style={labelStyle}>📸 Upload Scan Image (Optional)</label><input type="file" accept="image/*" onChange={handleFileChange} style={inputStyle} /></div>
-
+                    <div><label style={labelStyle}> Upload Scan Image (Optional)</label><input type="file" accept="image/*" onChange={handleFileChange} style={inputStyle} /></div>
                     <button type="submit" disabled={loading} style={{ width: '100%', padding: '15px', backgroundColor: loading ? '#9ca3af' : '#8b5cf6', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer' }}>
                       {loading ? 'Saving...' : '💾 Save Scan & Send to Doctor'}
                     </button>
