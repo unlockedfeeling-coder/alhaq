@@ -3,14 +3,14 @@ import { supabase } from '../config/supabase'
 
 export default function Cashier() {
   const [queue, setQueue] = useState([])
-  const [searchQueue, setSearchQueue] = useState('') // NEW: Search state for queue
+  const [searchQueue, setSearchQueue] = useState('') 
   const [selected, setSelected] = useState(null)
   const [patient, setPatient] = useState(null)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   
   const [history, setHistory] = useState([])
-  const [searchHistory, setSearchHistory] = useState('') // NEW: Search state for history
+  const [searchHistory, setSearchHistory] = useState('') 
   const [cashierName, setCashierName] = useState('Loading...')
   
   const [showReceipt, setShowReceipt] = useState(false)
@@ -91,6 +91,16 @@ export default function Cashier() {
       if (radFee > 0) updates.radiology_paid = true
       if (dispFee > 0) updates.dispensary_paid = true
 
+      // 🚀 AUTO-ROUTING LOGIC FOR WALK-INS
+      // If the prescription says "Lab", instantly send to Lab queue
+      if (selected.prescription && selected.prescription.includes('Lab')) {
+        updates.sent_to_lab = true;
+      }
+      // If the prescription says "X-Ray" or "Scan", instantly send to Radiology queue
+      if (selected.prescription && (selected.prescription.includes('X-Ray') || selected.prescription.includes('Scan') || selected.prescription.includes('Ultrasound'))) {
+        updates.sent_to_radiology = true;
+      }
+
       await supabase.from('consultations').update(updates).eq('id', selected.id)
 
       setReceiptData({ 
@@ -101,7 +111,7 @@ export default function Cashier() {
       setShowReceipt(true)
       
       setSelected(null); setPatient(null); fetchQueue(); fetchHistory() 
-    } catch (err) { setMessage(' Error: ' + err.message) }
+    } catch (err) { setMessage('❌ Error: ' + err.message) }
     setLoading(false)
   }
 
@@ -152,7 +162,6 @@ export default function Cashier() {
             <h3 style={{ color: '#333', margin: 0 }}>Pending Payments</h3>
           </div>
           
-          {/* NEW: Queue Search Bar */}
           <input 
             type="text" 
             placeholder="🔍 Search Patient ID in queue..." 
@@ -182,7 +191,7 @@ export default function Cashier() {
               </div>
 
               <div style={{ marginBottom: '20px' }}>
-                <h4 style={{ color: '#333', marginBottom: '15px' }}> Bill Summary:</h4>
+                <h4 style={{ color: '#333', marginBottom: '15px' }}>🧾 Bill Summary:</h4>
                 
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid #eee' }}>
                   <span style={{ fontWeight: 'bold' }}>🧪 Lab Fees:</span>
@@ -195,7 +204,7 @@ export default function Cashier() {
                 </div>
                 
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid #eee' }}>
-                  <span style={{ fontWeight: 'bold' }}> Dispensary / Herbs:</span>
+                  <span style={{ fontWeight: 'bold' }}>🌿 Dispensary / Herbs:</span>
                   <span style={{ fontSize: '16px' }}>GH₵{Number(selected.dispensary_fee || 0).toFixed(2)}</span>
                 </div>
                 
@@ -231,7 +240,6 @@ export default function Cashier() {
           </button>
         </div>
         
-        {/* NEW: History Search Bar */}
         <input 
           type="text" 
           placeholder="🔍 Search history by Name, ID, or Receipt #..." 
@@ -267,7 +275,7 @@ export default function Cashier() {
                     <td style={tdStyle}>
                       <div style={{ fontSize: '12px' }}>
                         {rec.lab_fee > 0 && <div>🧪 Lab: GH₵{Number(rec.lab_fee).toFixed(2)}</div>}
-                        {rec.radiology_fee > 0 && <div>🩻 X-Ray/Scan: GH{Number(rec.radiology_fee).toFixed(2)}</div>}
+                        {rec.radiology_fee > 0 && <div>🩻 X-Ray/Scan: GH₵{Number(rec.radiology_fee).toFixed(2)}</div>}
                         {rec.dispensary_fee > 0 && <div>🌿 Herbs: GH₵{Number(rec.dispensary_fee).toFixed(2)}</div>}
                         {rec.description && <div>📁 {rec.description}</div>}
                       </div>
@@ -285,7 +293,7 @@ export default function Cashier() {
                         {rec.payment_method}
                       </span>
                     </td>
-                    <td style={tdStyle}><span style={{ fontSize: '12px', color: '#666' }}> {rec.cashier_name || 'Unknown'}</span></td>
+                    <td style={tdStyle}><span style={{ fontSize: '12px', color: '#666' }}>👤 {rec.cashier_name || 'Unknown'}</span></td>
                   </tr>
                 ))}
               </tbody>
@@ -316,7 +324,7 @@ export default function Cashier() {
             <div style={{ borderTop: '1px dashed #ccc', paddingTop: '10px', marginBottom: '15px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '5px', fontWeight: 'bold' }}>
                 <span>{receiptData.service_description || receiptData.description || 'Services Rendered'}</span>
-                <span>GH{Number(receiptData.total_amount).toFixed(2)}</span>
+                <span>GH₵{Number(receiptData.total_amount).toFixed(2)}</span>
               </div>
               
               {receiptData.lab_fee > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#666', marginLeft: '10px' }}><span>- Lab Fees</span><span>GH₵{Number(receiptData.lab_fee).toFixed(2)}</span></div>}
