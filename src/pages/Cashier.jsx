@@ -51,6 +51,7 @@ export default function Cashier() {
     if (data && data.length > 0) setPatient(data[0])
   }
 
+  // 🚀 UPDATED: Fetches exact test names and drug names for the receipt
   const handleConfirmPayment = async (method) => {
     if (!selected) return
     setLoading(true)
@@ -69,6 +70,31 @@ export default function Cashier() {
       if (radFee > 0 && labFee > 0) serviceDescription = "Lab & Radiology Services";
 
       const receiptNum = `REC-${Date.now().toString().slice(-6)}`
+
+      // 1. Fetch Specific Tests/Services
+      const { data: servicesData } = await supabase
+        .from('consultation_services')
+        .select('medical_services(name, category), price_at_time')
+        .eq('consultation_id', selected.id);
+
+      // 2. Fetch Specific Medications
+      const { data: medsData } = await supabase
+        .from('prescription_items')
+        .select('medications(name, drug_type), quantity')
+        .eq('consultation_id', selected.id);
+
+      // 3. Build a detailed list for the receipt
+      let detailedItems = [];
+      if (servicesData) {
+        servicesData.forEach(s => {
+          detailedItems.push({ name: s.medical_services.name, price: s.price_at_time, type: 'service' });
+        });
+      }
+      if (medsData) {
+        medsData.forEach(m => {
+          detailedItems.push({ name: `${m.medications.name} (x${m.quantity})`, price: null, type: 'med' });
+        });
+      }
 
       const { data: receiptRow, error: receiptError } = await supabase.from('receipts').insert([{
         receipt_number: receiptNum, 
@@ -91,12 +117,10 @@ export default function Cashier() {
       if (radFee > 0) updates.radiology_paid = true
       if (dispFee > 0) updates.dispensary_paid = true
 
-      // 🚀 AUTO-ROUTING LOGIC FOR WALK-INS
-      // If the prescription says "Lab", instantly send to Lab queue
+      // AUTO-ROUTING LOGIC FOR WALK-INS
       if (selected.prescription && selected.prescription.includes('Lab')) {
         updates.sent_to_lab = true;
       }
-      // If the prescription says "X-Ray" or "Scan", instantly send to Radiology queue
       if (selected.prescription && (selected.prescription.includes('X-Ray') || selected.prescription.includes('Scan') || selected.prescription.includes('Ultrasound'))) {
         updates.sent_to_radiology = true;
       }
@@ -106,7 +130,8 @@ export default function Cashier() {
       setReceiptData({ 
         ...receiptRow, 
         patient_id: selected.patient_id,
-        service_description: serviceDescription 
+        service_description: serviceDescription,
+        detailedItems: detailedItems // Pass the specific items to the receipt modal
       })
       setShowReceipt(true)
       
@@ -117,12 +142,7 @@ export default function Cashier() {
 
   const handlePrint = () => { window.print() }
 
-  // Filter logic for Queue
-  const filteredQueue = queue.filter(item => 
-    item.patient_id.toLowerCase().includes(searchQueue.toLowerCase())
-  )
-
-  // Filter logic for History
+  const filteredQueue = queue.filter(item => item.patient_id.toLowerCase().includes(searchQueue.toLowerCase()))
   const filteredHistory = history.filter(item => 
     item.patient_name?.toLowerCase().includes(searchHistory.toLowerCase()) || 
     item.patient_id?.toLowerCase().includes(searchHistory.toLowerCase()) ||
@@ -263,6 +283,7 @@ export default function Cashier() {
                   <th style={thStyle}>Amount</th>
                   <th style={thStyle}>Payment</th>
                   <th style={thStyle}>Cashier</th>
+                  <th style={thStyle}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -294,6 +315,24 @@ export default function Cashier() {
                       </span>
                     </td>
                     <td style={tdStyle}><span style={{ fontSize: '12px', color: '#666' }}>👤 {rec.cashier_name || 'Unknown'}</span></td>
+                    <td style={tdStyle}>
+                      <button 
+                        onClick={() => { setReceiptData(rec); setShowReceipt(true); }}
+                        style={{ 
+                          padding: '6px 10px', 
+                          backgroundColor: '#3b82f6', 
+                          color: 'white', 
+                          border: 'none', 
+                          borderRadius: '4px', 
+                          cursor: 'pointer', 
+                          fontSize: '12px',
+                          fontWeight: 'bold'
+                        }}
+                        title="Reprint Receipt"
+                      >
+                        🖨️ Reprint
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -322,14 +361,21 @@ export default function Cashier() {
             </div>
 
             <div style={{ borderTop: '1px dashed #ccc', paddingTop: '10px', marginBottom: '15px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '5px', fontWeight: 'bold' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '8px', fontWeight: 'bold', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>
                 <span>{receiptData.service_description || receiptData.description || 'Services Rendered'}</span>
                 <span>GH₵{Number(receiptData.total_amount).toFixed(2)}</span>
               </div>
               
-              {receiptData.lab_fee > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#666', marginLeft: '10px' }}><span>- Lab Fees</span><span>GH₵{Number(receiptData.lab_fee).toFixed(2)}</span></div>}
-              {receiptData.radiology_fee > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#666', marginLeft: '10px' }}><span>- X-Ray / Scan</span><span>GH₵{Number(receiptData.radiology_fee).toFixed(2)}</span></div>}
-              {receiptData.dispensary_fee > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#666', marginLeft: '10px' }}><span>- Dispensary</span><span>GH₵{Number(receiptData.dispensary_fee).toFixed(2)}</span></div>}
+              {receiptData.detailedItems && receiptData.detailedItems.length > 0 ? (
+                receiptData.detailedItems.map((item, index) => (
+                  <div key={index} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#333', marginBottom: '4px', paddingLeft: '10px' }}>
+                    <span>• {item.name}</span>
+                    {item.price > 0 && <span>GH₵{Number(item.price).toFixed(2)}</span>}
+                  </div>
+                ))
+              ) : (
+                <div style={{ fontSize: '12px', color: '#666', fontStyle: 'italic', paddingLeft: '10px' }}>General Service</div>
+              )}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '18px', fontWeight: 'bold', borderTop: '2px solid #333', paddingTop: '10px', marginBottom: '15px' }}>
@@ -396,7 +442,8 @@ function RegistrationFees({ onPaymentComplete, onShowReceipt }) {
           payment_method: 'Cash', 
           cashier_name: 'Cashier', 
           description: 'Patient Registration / Folder Fee', 
-          created_at: new Date().toISOString() 
+          created_at: new Date().toISOString(),
+          detailedItems: [{ name: 'Registration / Folder Fee', price: 20 }]
         })
       }
       setSelected(null)

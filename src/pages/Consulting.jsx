@@ -41,6 +41,7 @@ export default function Consulting() {
     fetchData()
   }, [])
 
+  // 🚀 UPDATED: Proactive Stock Warning
   const handleAddMed = () => {
     if (!currentMedId || currentMedQty <= 0) return
     const med = availableMeds.find(m => m.id === currentMedId)
@@ -50,6 +51,15 @@ export default function Consulting() {
       return 
     }
     
+    // Check if prescribed quantity exceeds available stock
+    if (currentMedQty > med.quantity_in_stock) {
+      setMessage(`⚠️ WARNING: You are prescribing ${currentMedQty} ${med.unit}, but only ${med.quantity_in_stock} ${med.unit} are currently in stock!`)
+      // We still allow adding it, but the warning is clear. 
+      // Alternatively, you can add 'return;' here to strictly block it.
+    } else {
+      setMessage('') // Clear warning if stock is fine
+    }
+    
     setSelectedMeds([...selectedMeds, { 
       id: med.id, 
       name: med.name, 
@@ -57,11 +67,11 @@ export default function Consulting() {
       unit: med.unit, 
       unit_price: Number(med.unit_price) || 0,
       drug_type: med.drug_type || 'Herbal',
-      dosage: '' 
+      dosage: '',
+      currentStock: med.quantity_in_stock // Save stock to show visual warning in the list
     }])
     setCurrentMedId('')
     setCurrentMedQty(1)
-    setMessage('')
   }
 
   const handleUpdateDosage = (index, value) => {
@@ -154,11 +164,8 @@ export default function Consulting() {
     setLoading(false)
   }
 
-  // --- UPDATED: handleSave now allows empty forms for direct admissions ---
   const handleSave = async (e) => {
     e.preventDefault()
-    
-    // If the doctor didn't type notes, we use a default for admissions
     const finalNotes = customNotes.trim() ? customNotes : "General Consultation / Admission";
 
     setLoading(true)
@@ -174,7 +181,6 @@ export default function Consulting() {
         `${m.name} (${m.qty} ${m.unit}) [${m.drug_type || 'Herbal'}]: ${m.dosage || 'Follow standard dosage'}`
       ).join('\n')
 
-      // Build the prescription text safely
       let finalPrescription = finalNotes;
       if (selectedMeds.length > 0) {
         finalPrescription += `\n\n--- PRESCRIBED MEDICATIONS & DOSAGE ---\n${dosageInstructions}`;
@@ -245,7 +251,6 @@ export default function Consulting() {
     setLoading(false)
   }
 
-  // Functions for Ward Admission
   const openAdmitModal = async () => {
     setShowAdmitModal(true)
     setSelectedAdmitBed(null)
@@ -309,8 +314,19 @@ export default function Consulting() {
 
   return (
     <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-      <h2 style={{ color: '#333', marginBottom: '20px', borderBottom: '2px solid #16a34a', paddingBottom: '10px' }}> Doctor Consulting</h2>
-      {message && <div style={{ backgroundColor: message.includes('✅') ? '#dcfce7' : '#fee2e2', color: message.includes('✅') ? '#166534' : '#991b1b', padding: '15px', borderRadius: '8px', marginBottom: '20px', fontWeight: 'bold', whiteSpace: 'pre-line' }}>{message}</div>}
+      <h2 style={{ color: '#333', marginBottom: '20px', borderBottom: '2px solid #16a34a', paddingBottom: '10px' }}>🩺 Doctor Consulting</h2>
+      
+      {/* 🚀 UPDATED: Message box now handles warnings with a distinct yellow color */}
+      {message && (
+        <div style={{ 
+          backgroundColor: message.includes('✅') ? '#dcfce7' : message.includes('⚠️') ? '#fef3c7' : '#fee2e2', 
+          color: message.includes('✅') ? '#166534' : message.includes('⚠️') ? '#92400e' : '#991b1b', 
+          padding: '15px', borderRadius: '8px', marginBottom: '20px', fontWeight: 'bold', whiteSpace: 'pre-line',
+          border: `1px solid ${message.includes('⚠️') ? '#fde68a' : message.includes('✅') ? '#86efac' : '#fca5a5'}`
+        }}>
+          {message}
+        </div>
+      )}
 
       {!patient && (
         <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
@@ -360,7 +376,7 @@ export default function Consulting() {
 
           {imagingResults.length > 0 && (
             <div style={{ backgroundColor: '#fdf2f8', padding: '15px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #fbcfe8' }}>
-              <h4 style={{ margin: '0 0 10px 0', color: '#be185d' }}> Past X-Ray / Scan Results</h4>
+              <h4 style={{ margin: '0 0 10px 0', color: '#be185d' }}>🩻 Past X-Ray / Scan Results</h4>
               {imagingResults.map((img, idx) => (
                 <div key={img.id} style={{ marginBottom: '10px', paddingBottom: '10px', borderBottom: idx < imagingResults.length - 1 ? '1px solid #f9a8d4' : 'none' }}>
                   <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>{new Date(img.created_at).toLocaleString()}</div>
@@ -368,7 +384,7 @@ export default function Consulting() {
                   <div><strong>Findings:</strong> {img.findings}</div>
                   {img.image_link && (
                     <a href={img.image_link} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: '8px', fontSize: '13px', color: '#3b82f6', textDecoration: 'underline', fontWeight: 'bold' }}>
-                       View Image
+                       📸 View Image
                     </a>
                   )}
                 </div>
@@ -394,7 +410,7 @@ export default function Consulting() {
                   <option value="">-- Select Medication --</option>
                   {filteredMeds.map(med => (
                     <option key={med.id} value={med.id}>
-                      {med.drug_type === 'Chemical' ? '💊' : ''} {med.name} (Stock: {med.quantity_in_stock}) - GH₵{med.unit_price}
+                      {med.drug_type === 'Chemical' ? '💊' : '🌿'} {med.name} (Stock: {med.quantity_in_stock}) - GH₵{med.unit_price}
                     </option>
                   ))}
                 </select>
@@ -402,25 +418,29 @@ export default function Consulting() {
                 <button type="button" onClick={handleAddMed} style={{ padding: '12px 20px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Add</button>
               </div>
               
-              {selectedMeds.map((med, index) => (
-                <div key={med.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #f3f4f6', gap: '10px', flexWrap: 'wrap' }}>
-                  <div style={{ flex: 2, minWidth: '200px' }}>
-                    <strong>{med.drug_type === 'Chemical' ? '💊' : '🌿'} {med.name}</strong> <span style={{color: '#666'}}>(x{med.qty} {med.unit})</span>
+              {selectedMeds.map((med, index) => {
+                const isOverStock = med.qty > med.currentStock;
+                return (
+                  <div key={med.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', marginBottom: '8px', backgroundColor: isOverStock ? '#fee2e2' : '#f0fdf4', border: `1px solid ${isOverStock ? '#fca5a5' : '#86efac'}`, borderRadius: '6px', gap: '10px', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 2, minWidth: '200px' }}>
+                      <strong>{med.drug_type === 'Chemical' ? '💊' : '🌿'} {med.name}</strong> <span style={{color: '#666'}}>(x{med.qty} {med.unit})</span>
+                      {isOverStock && <div style={{ fontSize: '11px', color: '#dc2626', fontWeight: 'bold', marginTop: '4px' }}>⚠️ Exceeds current stock ({med.currentStock})</div>}
+                    </div>
+                    <input 
+                      type="text" 
+                      value={med.dosage} 
+                      onChange={(e) => handleUpdateDosage(index, e.target.value)} 
+                      placeholder="e.g. 2 spoons after meals" 
+                      style={{ flex: 3, minWidth: '200px', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '13px' }} 
+                    />
+                    <button type="button" onClick={() => handleRemoveMed(med.id)} style={{ color: '#dc2626', background: '#fee2e2', border: 'none', borderRadius: '4px', padding: '6px 12px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>Remove</button>
                   </div>
-                  <input 
-                    type="text" 
-                    value={med.dosage} 
-                    onChange={(e) => handleUpdateDosage(index, e.target.value)} 
-                    placeholder="e.g. 2 spoons after meals" 
-                    style={{ flex: 3, minWidth: '200px', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', fontSize: '13px' }} 
-                  />
-                  <button type="button" onClick={() => handleRemoveMed(med.id)} style={{ color: '#dc2626', background: '#fee2e2', border: 'none', borderRadius: '4px', padding: '6px 12px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>Remove</button>
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             <div style={{ marginBottom: '25px', border: '1px solid #e5e7eb', padding: '20px', borderRadius: '8px' }}>
-              <h3 style={{ marginTop: 0 }}> Order Tests & Scans</h3>
+              <h3 style={{ marginTop: 0 }}>🧪 Order Tests & Scans</h3>
               <div style={{ display: 'flex', gap: '10px', marginBottom: '15px', flexWrap: 'wrap' }}>
                 <select value={currentServiceId} onChange={(e) => setCurrentServiceId(e.target.value)} style={{ flex: 3, minWidth: '250px', padding: '12px', border: '1px solid #ddd', borderRadius: '6px' }}>
                   <option value="">-- Select Test/Scan --</option>
@@ -462,15 +482,11 @@ export default function Consulting() {
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '20px' }}>
               <button onClick={() => handleRedirect('cashier')} disabled={loading} style={{ padding: '20px', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}>💰 Cashier Only</button>
-              <button onClick={() => handleRedirect('lab')} disabled={loading} style={{ padding: '20px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}> Lab (via Cashier)</button>
+              <button onClick={() => handleRedirect('lab')} disabled={loading} style={{ padding: '20px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}>🧪 Lab (via Cashier)</button>
               <button onClick={() => handleRedirect('xray')} disabled={loading} style={{ padding: '20px', backgroundColor: '#ec4899', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}>🩻 X-Ray (via Cashier)</button>
               <button onClick={() => handleRedirect('scan')} disabled={loading} style={{ padding: '20px', backgroundColor: '#8b5cf6', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}>🔬 Scan (via Cashier)</button>
-              <button onClick={() => handleRedirect('dispensary')} disabled={loading} style={{ padding: '20px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold', gridColumn: 'span 2' }}>/💊 Dispensary (via Cashier)</button>
-              
-              {/* Admit to Ward Button */}
-              <button onClick={openAdmitModal} disabled={loading} style={{ padding: '20px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold', gridColumn: 'span 2' }}>
-                🏥 Admit to Ward
-              </button>
+              <button onClick={() => handleRedirect('dispensary')} disabled={loading} style={{ padding: '20px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold', gridColumn: 'span 2' }}>🌿/💊 Dispensary (via Cashier)</button>
+              <button onClick={openAdmitModal} disabled={loading} style={{ padding: '20px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold', gridColumn: 'span 2' }}>🏥 Admit to Ward</button>
             </div>
             
             <button onClick={() => setShowRedirectModal(false)} disabled={loading} style={{ padding: '10px 20px', backgroundColor: '#e5e7eb', color: '#374151', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold' }}>Cancel</button>

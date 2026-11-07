@@ -20,6 +20,7 @@ export default function Dashboard({ userRole, userEmail }) {
   const location = useLocation()
   const [activePage, setActivePage] = useState('dashboard')
   const [stats, setStats] = useState({ patients: 0, revenue: 0, queue: 0, pending: 0 })
+  const [financials, setFinancials] = useState({ cash: 0, momo: 0, card: 0, total: 0 })
   const [loadingStats, setLoadingStats] = useState(true)
   
   const handleLogout = async () => { 
@@ -27,7 +28,7 @@ export default function Dashboard({ userRole, userEmail }) {
     navigate('/login')
   }
 
-  // --- ROLE PERMISSIONS (Updated with 'wards') ---
+  // --- ROLE PERMISSIONS ---
   const rolePermissions = {
     admin: ['dashboard', 'registration', 'vitals', 'consulting', 'cashier', 'lab', 'xray', 'scan', 'dispensary', 'inventory', 'history', 'recover-id', 'admin-panel', 'wards'],
     registerer: ['dashboard', 'registration', 'recover-id'],
@@ -50,6 +51,7 @@ export default function Dashboard({ userRole, userEmail }) {
     } else { setActivePage('dashboard') }
   }, [location, allowedPages, navigate])
 
+  // 🚀 UPDATED: Fetches stats AND daily financial breakdown
   const fetchDashboardStats = async () => {
     setLoadingStats(true)
     try {
@@ -63,14 +65,28 @@ export default function Dashboard({ userRole, userEmail }) {
         .gte('registered_at', startOfDay)
         .lte('registered_at', endOfDay)
       
-      let revenue = 0;
+      let cashTotal = 0;
+      let momoTotal = 0;
+      let cardTotal = 0;
+      let grandTotal = 0;
+
+      // Fetch today's receipts with payment methods for Admin
       if (userRole === 'admin') {
         const { data: todayReceipts } = await supabase
           .from('receipts')
-          .select('total_amount')
+          .select('total_amount, payment_method')
           .gte('created_at', startOfDay)
           .lte('created_at', endOfDay)
-        revenue = todayReceipts ? todayReceipts.reduce((sum, r) => sum + Number(r.total_amount), 0) : 0
+        
+        if (todayReceipts) {
+          todayReceipts.forEach(r => {
+            const amount = Number(r.total_amount) || 0;
+            grandTotal += amount;
+            if (r.payment_method === 'Cash') cashTotal += amount;
+            else if (r.payment_method === 'Mobile Money') momoTotal += amount;
+            else if (r.payment_method === 'Card') cardTotal += amount;
+          });
+        }
       }
 
       const { count: activeConsultations } = await supabase
@@ -88,10 +104,18 @@ export default function Dashboard({ userRole, userEmail }) {
 
       setStats({ 
         patients: patientsToday || 0, 
-        revenue: revenue, 
+        revenue: grandTotal, 
         queue: activeConsultations || 0, 
         pending: pendingTasks || 0 
       })
+
+      setFinancials({
+        cash: cashTotal,
+        momo: momoTotal,
+        card: cardTotal,
+        total: grandTotal
+      })
+
     } catch (err) { 
       console.error("Error fetching dashboard stats:", err) 
     }
@@ -125,27 +149,47 @@ export default function Dashboard({ userRole, userEmail }) {
             </div>
           </div>
           
-          <div id="admin-daily-report" className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
+          <div id="admin-daily-report" className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '30px' }}>
             <div style={{ background: 'rgba(255, 255, 255, 0.9)', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', borderLeft: '5px solid #16a34a' }}>
-              <h3 style={{ color: '#666', fontSize: '14px', margin: '0 0 10px 0' }}> Patients Today</h3>
+              <h3 style={{ color: '#666', fontSize: '14px', margin: '0 0 10px 0' }}>👥 Patients Today</h3>
               <div style={{ fontSize: '42px', fontWeight: 'bold', color: '#16a34a' }}>{loadingStats ? '...' : stats.patients}</div>
             </div>
             <div style={{ background: 'rgba(255, 255, 255, 0.9)', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', borderLeft: '5px solid #3b82f6' }}>
               <h3 style={{ color: '#666', fontSize: '14px', margin: '0 0 10px 0' }}>⏳ Active Today</h3>
               <div style={{ fontSize: '42px', fontWeight: 'bold', color: '#3b82f6' }}>{loadingStats ? '...' : stats.queue}</div>
             </div>
-            
-            {userRole === 'admin' && (
-              <div style={{ background: 'rgba(255, 255, 255, 0.9)', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', borderLeft: '5px solid #f59e0b' }}>
-                <h3 style={{ color: '#666', fontSize: '14px', margin: '0 0 10px 0' }}> Today's Revenue (Admin Only)</h3>
-                <div style={{ fontSize: '42px', fontWeight: 'bold', color: '#f59e0b' }}>{loadingStats ? '...' : `GH₵${stats.revenue.toFixed(2)}`}</div>
-              </div>
-            )}
-
             <div style={{ background: 'rgba(255, 255, 255, 0.9)', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', borderLeft: '5px solid #ec4899' }}>
               <h3 style={{ color: '#666', fontSize: '14px', margin: '0 0 10px 0' }}>⚠️ Pending Tasks</h3>
               <div style={{ fontSize: '42px', fontWeight: 'bold', color: '#ec4899' }}>{loadingStats ? '...' : stats.pending}</div>
             </div>
+            
+            {/* 🚀 NEW: Daily Financial Summary (Visible to Admin) */}
+            {userRole === 'admin' && (
+              <div style={{ background: 'rgba(255, 255, 255, 0.9)', padding: '25px', borderRadius: '16px', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', borderLeft: '5px solid #f59e0b', gridColumn: '1 / -1' }}>
+                <h3 style={{ color: '#666', fontSize: '14px', margin: '0 0 15px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  💰 Today's Financial Summary 
+                  <span style={{ fontSize: '11px', backgroundColor: '#fef3c7', color: '#92400e', padding: '2px 8px', borderRadius: '12px' }}>Admin Only</span>
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px' }}>
+                  <div style={{ backgroundColor: '#dcfce7', padding: '15px', borderRadius: '10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '12px', color: '#166534', fontWeight: 'bold', marginBottom: '5px' }}>💵 Cash</div>
+                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#16a34a' }}>GH₵ {loadingStats ? '...' : financials.cash.toFixed(2)}</div>
+                  </div>
+                  <div style={{ backgroundColor: '#fef3c7', padding: '15px', borderRadius: '10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '12px', color: '#92400e', fontWeight: 'bold', marginBottom: '5px' }}>📱 Mobile Money</div>
+                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#d97706' }}>GH₵ {loadingStats ? '...' : financials.momo.toFixed(2)}</div>
+                  </div>
+                  <div style={{ backgroundColor: '#dbeafe', padding: '15px', borderRadius: '10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '12px', color: '#1e40af', fontWeight: 'bold', marginBottom: '5px' }}>💳 Card</div>
+                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#3b82f6' }}>GH₵ {loadingStats ? '...' : financials.card.toFixed(2)}</div>
+                  </div>
+                  <div style={{ backgroundColor: '#1e293b', padding: '15px', borderRadius: '10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 'bold', marginBottom: '5px' }}>🏆 GRAND TOTAL</div>
+                    <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#4ade80' }}>GH₵ {loadingStats ? '...' : financials.total.toFixed(2)}</div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )
@@ -220,15 +264,15 @@ export default function Dashboard({ userRole, userEmail }) {
             {isAllowed('vitals') && <button onClick={() => handleNavigation('vitals')} style={sidebarButtonStyle(activePage === 'vitals')}>❤️ Vitals</button>}
             {isAllowed('consulting') && <button onClick={() => handleNavigation('consulting')} style={sidebarButtonStyle(activePage === 'consulting')}>🩺 Consulting</button>}
             {isAllowed('cashier') && <button onClick={() => handleNavigation('cashier')} style={sidebarButtonStyle(activePage === 'cashier')}>💰 Cashier</button>}
-            {isAllowed('lab') && <button onClick={() => handleNavigation('lab')} style={sidebarButtonStyle(activePage === 'lab')}> Lab</button>}
-            {isAllowed('xray') && <button onClick={() => handleNavigation('xray')} style={sidebarButtonStyle(activePage === 'xray')}> X-Ray</button>}
+            {isAllowed('lab') && <button onClick={() => handleNavigation('lab')} style={sidebarButtonStyle(activePage === 'lab')}>🧪 Lab</button>}
+            {isAllowed('xray') && <button onClick={() => handleNavigation('xray')} style={sidebarButtonStyle(activePage === 'xray')}>🩻 X-Ray</button>}
             {isAllowed('scan') && <button onClick={() => handleNavigation('scan')} style={sidebarButtonStyle(activePage === 'scan')}>🔬 Scan</button>}
             {isAllowed('dispensary') && <button onClick={() => handleNavigation('dispensary')} style={sidebarButtonStyle(activePage === 'dispensary')}>🌿 Dispensary</button>}
             {isAllowed('inventory') && <button onClick={() => handleNavigation('inventory')} style={sidebarButtonStyle(activePage === 'inventory')}>💊 Inventory</button>}
             {isAllowed('wards') && <button onClick={() => handleNavigation('wards')} style={sidebarButtonStyle(activePage === 'wards')}>🏥 Wards & Beds</button>}
             {isAllowed('history') && <button onClick={() => handleNavigation('history')} style={sidebarButtonStyle(activePage === 'history')}>📁 Patient Records</button>}
             {isAllowed('recover-id') && <button onClick={() => handleNavigation('recover-id')} style={sidebarButtonStyle(activePage === 'recover-id')}>🔍 Recover ID</button>}
-            {isAllowed('admin-panel') && <button onClick={() => handleNavigation('admin-panel')} style={sidebarButtonStyle(activePage === 'admin-panel')}>️ Admin Panel</button>}
+            {isAllowed('admin-panel') && <button onClick={() => handleNavigation('admin-panel')} style={sidebarButtonStyle(activePage === 'admin-panel')}>⚙️ Admin Panel</button>}
           </nav>
 
           <div style={{ padding: '20px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
