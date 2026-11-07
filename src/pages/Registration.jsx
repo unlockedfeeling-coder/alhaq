@@ -4,16 +4,16 @@ import { supabase } from '../config/supabase'
 export default function Registration({ userRole, userEmail }) {
   const [formData, setFormData] = useState({
     first_name: '', middle_name: '', last_name: '', date_of_birth: '', gender: 'Male', 
-    phone: '', address: '', blood_type: 'O+', allergies: '', payment_method: 'Cash'
+    phone: '', address: '', blood_type: '', allergies: '', payment_method: 'Cash'
   })
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [pendingPatients, setPendingPatients] = useState([])
   const [regHistory, setRegHistory] = useState([])
 
-  // NEW: Pagination States
+  // Pagination States
   const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 10 // Shows 10 records per page
+  const itemsPerPage = 10
 
   const [returningId, setReturningId] = useState('')
   const [returningPatient, setReturningPatient] = useState(null)
@@ -25,7 +25,7 @@ export default function Registration({ userRole, userEmail }) {
   }, [])
 
   const fetchRegHistory = async () => {
-    setCurrentPage(1) // Reset to page 1 when refreshing data
+    setCurrentPage(1)
     const { data, error } = await supabase
       .from('receipts')
       .select('*')
@@ -52,7 +52,7 @@ export default function Registration({ userRole, userEmail }) {
         setMessage(`✅ Patient Verified: ${data.first_name} ${data.middle_name || ''} ${data.last_name} is already registered.`)
       }
     } catch (err) {
-      setReturningError(' Patient ID not found.')
+      setReturningError('❌ Patient ID not found.')
     }
     setLoading(false)
   }
@@ -78,7 +78,7 @@ export default function Registration({ userRole, userEmail }) {
         gender: formData.gender,
         phone: formData.phone,
         address: formData.address || null,
-        blood_type: formData.blood_type,
+        blood_type: formData.blood_type || null, // ✅ Saves as null if not selected
         allergies: formData.allergies || null,
         patient_id: newId,
         registration_paid: true,
@@ -101,13 +101,15 @@ export default function Registration({ userRole, userEmail }) {
       }])
 
       setMessage(`🎉 Registration Complete & Paid! New Patient ID: ${newId}`)
-      setFormData({ first_name: '', middle_name: '', last_name: '', date_of_birth: '', gender: 'Male', phone: '', address: '', blood_type: 'O+', allergies: '', payment_method: 'Cash' })
+      
+      // ✅ Reset form with empty blood_type
+      setFormData({ first_name: '', middle_name: '', last_name: '', date_of_birth: '', gender: 'Male', phone: '', address: '', blood_type: '', allergies: '', payment_method: 'Cash' })
       
       fetchRegHistory()
       fetchPending()
       
     } catch (err) { 
-      setMessage(' Error: ' + err.message) 
+      setMessage('❌ Error: ' + err.message) 
     }
     setLoading(false)
   }
@@ -153,7 +155,6 @@ export default function Registration({ userRole, userEmail }) {
     ? regHistory 
     : regHistory.filter(r => r.cashier_name === userEmail)
 
-  // PAGINATION LOGIC
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentItems = visibleHistory.slice(indexOfFirstItem, indexOfLastItem);
@@ -217,11 +218,22 @@ export default function Registration({ userRole, userEmail }) {
               </select>
             </div>
             <div><label style={labelStyle}>Phone Number *</label><input name="phone" value={formData.phone} onChange={handleChange} style={inputStyle} required /></div>
-            <div><label style={labelStyle}>Blood Type</label>
+            
+            {/* ✅ UPDATED: Blood Type is now explicitly optional */}
+            <div><label style={labelStyle}>Blood Type (Optional)</label>
               <select name="blood_type" value={formData.blood_type} onChange={handleChange} style={inputStyle}>
-                <option value="O+">O+</option><option value="O-">O-</option><option value="A+">A+</option><option value="A-">A-</option><option value="B+">B+</option><option value="B-">B-</option><option value="AB+">AB+</option>
+                <option value="">-- Select (Optional) --</option>
+                <option value="O+">O+</option>
+                <option value="O-">O-</option>
+                <option value="A+">A+</option>
+                <option value="A-">A-</option>
+                <option value="B+">B+</option>
+                <option value="B-">B-</option>
+                <option value="AB+">AB+</option>
+                <option value="AB-">AB-</option>
               </select>
             </div>
+            
             <div style={{ gridColumn: '1 / -1' }}><label style={labelStyle}>Address</label><input name="address" value={formData.address} onChange={handleChange} style={inputStyle} /></div>
             <div style={{ gridColumn: '1 / -1' }}><label style={labelStyle}>Allergies (Optional)</label><input name="allergies" value={formData.allergies} onChange={handleChange} style={inputStyle} placeholder="e.g. Penicillin, Peanuts" /></div>
             
@@ -269,7 +281,6 @@ export default function Registration({ userRole, userEmail }) {
                 </tr>
               </thead>
               <tbody>
-                {/* UPDATED: Map over currentItems instead of visibleHistory */}
                 {currentItems.map((rec) => (
                   <tr key={rec.id}>
                     <td style={tdStyle}>{new Date(rec.created_at).toLocaleString()}</td>
@@ -292,7 +303,6 @@ export default function Registration({ userRole, userEmail }) {
               </tbody>
             </table>
 
-            {/* NEW: PAGINATION CONTROLS */}
             {totalPages > 1 && (
               <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', marginTop: '25px', paddingTop: '15px', borderTop: '1px solid #e5e7eb' }}>
                 <button 
