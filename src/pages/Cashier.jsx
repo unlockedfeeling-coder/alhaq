@@ -30,11 +30,19 @@ export default function Cashier() {
     }
   }
 
+  // ✅ UPDATED: Fetches patient name to display at the top of the queue card
   const fetchQueue = async () => {
     setLoading(true)
     try {
       const { data } = await supabase.from('consultations').select('*').eq('sent_to_cashier', true).eq('cashier_completed', false).order('created_at', { ascending: false })
-      setQueue(data || [])
+      
+      const queueWithNames = await Promise.all((data || []).map(async (item) => {
+        const { data: patientData } = await supabase.from('patients').select('first_name, last_name').eq('patient_id', item.patient_id).single()
+        const patientName = patientData ? `${patientData.first_name} ${patientData.last_name}` : 'Unknown Patient'
+        return { ...item, patient_name: patientName }
+      }))
+      
+      setQueue(queueWithNames)
     } catch (err) { console.error(err) }
     setLoading(false)
   }
@@ -51,7 +59,6 @@ export default function Cashier() {
     if (data && data.length > 0) setPatient(data[0])
   }
 
-  // 🚀 UPDATED: Fetches exact test names and drug names for the receipt
   const handleConfirmPayment = async (method) => {
     if (!selected) return
     setLoading(true)
@@ -131,7 +138,7 @@ export default function Cashier() {
         ...receiptRow, 
         patient_id: selected.patient_id,
         service_description: serviceDescription,
-        detailedItems: detailedItems // Pass the specific items to the receipt modal
+        detailedItems: detailedItems
       })
       setShowReceipt(true)
       
@@ -142,7 +149,12 @@ export default function Cashier() {
 
   const handlePrint = () => { window.print() }
 
-  const filteredQueue = queue.filter(item => item.patient_id.toLowerCase().includes(searchQueue.toLowerCase()))
+  // ✅ UPDATED: Filters by Patient Name OR Patient ID
+  const filteredQueue = queue.filter(item => 
+    item.patient_id.toLowerCase().includes(searchQueue.toLowerCase()) || 
+    item.patient_name.toLowerCase().includes(searchQueue.toLowerCase())
+  )
+  
   const filteredHistory = history.filter(item => 
     item.patient_name?.toLowerCase().includes(searchHistory.toLowerCase()) || 
     item.patient_id?.toLowerCase().includes(searchHistory.toLowerCase()) ||
@@ -182,9 +194,10 @@ export default function Cashier() {
             <h3 style={{ color: '#333', margin: 0 }}>Pending Payments</h3>
           </div>
           
+          {/* ✅ UPDATED: Search placeholder mentions Name */}
           <input 
             type="text" 
-            placeholder="🔍 Search Patient ID in queue..." 
+            placeholder="🔍 Search Patient Name or ID..." 
             value={searchQueue}
             onChange={(e) => setSearchQueue(e.target.value)}
             style={{ width: '100%', padding: '10px', border: '1px solid #e5e7eb', borderRadius: '6px', marginBottom: '15px', fontSize: '14px', boxSizing: 'border-box' }}
@@ -193,8 +206,10 @@ export default function Cashier() {
           {filteredQueue.length === 0 ? <p style={{textAlign: 'center', color: '#666'}}>No patients waiting.</p> : 
             filteredQueue.map((item) => (
               <div key={item.id} onClick={() => handleSelectPatient(item)} style={{ padding: '15px', marginBottom: '10px', backgroundColor: selected?.id === item.id ? '#fffbeb' : '#f9fafb', border: `1px solid ${selected?.id === item.id ? '#f59e0b' : '#e5e7eb'}`, borderRadius: '8px', cursor: 'pointer' }}>
-                <div style={{ fontWeight: 'bold' }}>ID: {item.patient_id}</div>
-                <div style={{ fontSize: '13px', color: '#666', marginTop: '5px' }}>
+                {/* 🚀 NAME AT THE VERY TOP */}
+                <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#333', marginBottom: '4px' }}>{item.patient_name}</div>
+                <div style={{ fontSize: '12px', color: '#666', marginBottom: '6px' }}>🆔 ID: {item.patient_id}</div>
+                <div style={{ fontSize: '13px', color: '#666' }}>
                   Due: <span style={{color: '#dc2626', fontWeight: 'bold'}}>GH₵{Number((item.lab_fee||0) + (item.radiology_fee||0) + (item.dispensary_fee||0)).toFixed(2)}</span>
                 </div>
               </div>

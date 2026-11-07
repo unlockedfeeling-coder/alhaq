@@ -24,22 +24,28 @@ export default function Xray() {
     setXrayServices(data || [])
   }
 
-  // ✅ MAIN QUEUE: ONLY shows patients who have ALREADY PAID
+  // ✅ MAIN QUEUE: Fetches patient name to display at the top
   const fetchQueue = async () => {
     setLoading(true)
     try {
       const { data } = await supabase.from('consultations').select('*').eq('sent_to_radiology', true).eq('radiology_completed', false).eq('radiology_paid', true).order('created_at', { ascending: false })
-      const queueWithXray = await Promise.all((data || []).map(async (item) => {
+      
+      const queueWithDetails = await Promise.all((data || []).map(async (item) => {
         const { data: services } = await supabase.from('consultation_services').select('medical_services(name, category)').eq('consultation_id', item.id)
         const xrayService = services?.find(s => s.medical_services.category === 'X-Ray')
-        return { ...item, xray_name: xrayService ? xrayService.medical_services.name : 'General X-Ray' }
+        
+        // Fetch patient name for the card
+        const { data: patientData } = await supabase.from('patients').select('first_name, last_name').eq('patient_id', item.patient_id).single()
+        const patientName = patientData ? `${patientData.first_name} ${patientData.last_name}` : 'Unknown Patient'
+        
+        return { ...item, xray_name: xrayService ? xrayService.medical_services.name : 'General X-Ray', patient_name: patientName }
       }))
-      setQueue(queueWithXray)
+      setQueue(queueWithDetails)
     } catch (err) { console.error(err) }
     setLoading(false)
   }
 
-  // ✅ PENDING LIST: STRICTLY X-RAY WALK-INS NOT YET PAID
+  // ✅ PENDING LIST: Fetches patient name to display at the top
   const fetchPendingWalkIns = async () => {
     const { data } = await supabase
       .from('consultations')
@@ -49,7 +55,14 @@ export default function Xray() {
       .eq('radiology_paid', false)
       .ilike('prescription', '%X-Ray%') // PREVENTS LAB/SCAN PATIENTS FROM SHOWING HERE
       .order('created_at', { ascending: false })
-    setPendingWalkIns(data || [])
+    
+    const pendingWithNames = await Promise.all((data || []).map(async (item) => {
+      const { data: patientData } = await supabase.from('patients').select('first_name, last_name').eq('patient_id', item.patient_id).single()
+      const patientName = patientData ? `${patientData.first_name} ${patientData.last_name}` : 'Unknown Patient'
+      return { ...item, patient_name: patientName }
+    }))
+    
+    setPendingWalkIns(pendingWithNames)
   }
 
   const handleSelect = async (item) => {
@@ -59,7 +72,7 @@ export default function Xray() {
       if (error) throw error; if (!data || data.length === 0) { setPatient(null); return }
       setPatient(data[0])
     } catch (err) { setPatient(null) }
-    }
+  }
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value })
   const handleFileChange = (e) => { if (e.target.files && e.target.files[0]) setSelectedFile(e.target.files[0]) }
@@ -124,7 +137,12 @@ export default function Xray() {
     setLoading(false)
   }
 
-  const filteredQueue = queue.filter(item => item.patient_id.toLowerCase().includes(searchQueue.toLowerCase()) || item.xray_name.toLowerCase().includes(searchQueue.toLowerCase()))
+  const filteredQueue = queue.filter(item => 
+    item.patient_id.toLowerCase().includes(searchQueue.toLowerCase()) || 
+    item.patient_name.toLowerCase().includes(searchQueue.toLowerCase()) ||
+    item.xray_name.toLowerCase().includes(searchQueue.toLowerCase())
+  )
+  
   const inputStyle = { width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box', marginBottom: '15px' }
   const labelStyle = { display: 'block', marginBottom: '5px', color: '#333', fontWeight: 'bold', fontSize: '14px' }
   const modalOverlay = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }
@@ -144,9 +162,11 @@ export default function Xray() {
             <div style={{ marginBottom: '20px', backgroundColor: '#fffbeb', padding: '15px', borderRadius: '8px', border: '1px solid #fde68a' }}>
               <h4 style={{ margin: '0 0 10px 0', color: '#92400e', fontSize: '14px' }}>⏳ Pending Walk-ins (Waiting for Cashier Payment)</h4>
               {pendingWalkIns.map(item => (
-                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #fcd34d' }}>
+                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #fcd34d' }}>
                   <div>
-                    <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{item.patient_id}</div>
+                    {/* 🚀 NAME AT THE VERY TOP */}
+                    <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#333', marginBottom: '4px' }}>{item.patient_name}</div>
+                    <div style={{ fontSize: '12px', color: '#666', marginBottom: '2px' }}>🆔 {item.patient_id}</div>
                     <div style={{ fontSize: '12px', color: '#dc2626', fontWeight: 'bold' }}>Due: GH₵ {Number(item.total_amount || item.radiology_fee || 0).toFixed(2)}</div>
                   </div>
                   <span style={{ padding: '6px 12px', backgroundColor: '#f59e0b', color: 'white', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold' }}>Awaiting Payment</span>
@@ -155,12 +175,14 @@ export default function Xray() {
             </div>
           )}
           
-          <input type="text" placeholder="🔍 Search Patient ID..." value={searchQueue} onChange={(e) => setSearchQueue(e.target.value)} style={{ width: '100%', padding: '10px', border: '1px solid #e5e7eb', borderRadius: '6px', marginBottom: '15px', boxSizing: 'border-box' }} />
+          <input type="text" placeholder="🔍 Search Patient Name or ID..." value={searchQueue} onChange={(e) => setSearchQueue(e.target.value)} style={{ width: '100%', padding: '10px', border: '1px solid #e5e7eb', borderRadius: '6px', marginBottom: '15px', boxSizing: 'border-box' }} />
           
           {filteredQueue.length === 0 ? <p style={{textAlign: 'center', color: '#666'}}>No patients ready for testing.</p> : filteredQueue.map((item) => (
             <div key={item.id} onClick={() => handleSelect(item)} style={{ padding: '15px', marginBottom: '10px', backgroundColor: selected?.id === item.id ? '#fdf2f8' : '#f9fafb', border: `1px solid ${selected?.id === item.id ? '#ec4899' : '#e5e7eb'}`, borderRadius: '8px', cursor: 'pointer' }}>
-              <div style={{ fontWeight: 'bold', fontSize: '16px' }}>ID: {item.patient_id}</div>
-              <div style={{ fontSize: '13px', color: '#9d174d', fontWeight: '600', marginTop: '4px' }}>🩻 {item.xray_name}</div>
+              {/* 🚀 NAME AT THE VERY TOP */}
+              <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#333', marginBottom: '4px' }}>{item.patient_name}</div>
+              <div style={{ fontSize: '12px', color: '#666', marginBottom: '6px' }}>🆔 ID: {item.patient_id}</div>
+              <div style={{ fontSize: '13px', color: '#9d174d', fontWeight: '600' }}>🩻 {item.xray_name}</div>
               <div style={{ fontSize: '12px', marginTop: '8px', color: '#16a34a', fontWeight: 'bold' }}>✅ PAID - Ready for X-Ray</div>
             </div>
           ))}

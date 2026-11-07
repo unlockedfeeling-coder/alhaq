@@ -23,7 +23,7 @@ export default function Lab() {
     setLabServices(data || [])
   }
 
-  // ✅ MAIN QUEUE: ONLY shows patients who have ALREADY PAID
+  // ✅ MAIN QUEUE: Fetches patient name to display at the top
   const fetchQueue = async () => {
     setLoading(true)
     try {
@@ -32,31 +32,43 @@ export default function Lab() {
         .select('*')
         .eq('sent_to_lab', true)
         .eq('lab_completed', false)
-        .eq('lab_paid', true) // MUST BE PAID TO BE HERE
+        .eq('lab_paid', true)
         .order('created_at', { ascending: false })
       
-      const queueWithTests = await Promise.all((data || []).map(async (item) => {
+      const queueWithDetails = await Promise.all((data || []).map(async (item) => {
         const { data: services } = await supabase.from('consultation_services').select('medical_services(name, category)').eq('consultation_id', item.id)
         const labServicesList = services?.filter(s => s.medical_services.category === 'Lab').map(s => s.medical_services.name)
         const testName = labServicesList && labServicesList.length > 0 ? labServicesList.join(', ') : 'General Lab Test'
-        return { ...item, test_name: testName }
+        
+        // Fetch patient name for the card
+        const { data: patientData } = await supabase.from('patients').select('first_name, last_name').eq('patient_id', item.patient_id).single()
+        const patientName = patientData ? `${patientData.first_name} ${patientData.last_name}` : 'Unknown Patient'
+        
+        return { ...item, test_name: testName, patient_name: patientName }
       }))
-      setQueue(queueWithTests)
+      setQueue(queueWithDetails)
     } catch (err) { console.error(err) }
     setLoading(false)
   }
 
-  // ✅ PENDING LIST: Shows walk-ins registered here but NOT YET PAID
+  // ✅ PENDING LIST: Fetches patient name to display at the top
   const fetchPendingWalkIns = async () => {
     const { data } = await supabase
       .from('consultations')
       .select('*')
       .eq('sent_to_lab', true)
       .eq('lab_completed', false)
-      .eq('lab_paid', false) // NOT PAID YET
-      .ilike('prescription', '%Walk-in%') // STRICTLY LAB WALK-INS
+      .eq('lab_paid', false)
+      .ilike('prescription', '%Walk-in%')
       .order('created_at', { ascending: false })
-    setPendingWalkIns(data || [])
+    
+    const pendingWithNames = await Promise.all((data || []).map(async (item) => {
+      const { data: patientData } = await supabase.from('patients').select('first_name, last_name').eq('patient_id', item.patient_id).single()
+      const patientName = patientData ? `${patientData.first_name} ${patientData.last_name}` : 'Unknown Patient'
+      return { ...item, patient_name: patientName }
+    }))
+    
+    setPendingWalkIns(pendingWithNames)
   }
 
   const handleSelect = async (item) => {
@@ -104,7 +116,6 @@ export default function Lab() {
       const uniqueId = Date.now().toString().slice(-5); const newPatientId = `WK-2026-${uniqueId}`
       await supabase.from('patients').insert([{ patient_id: newPatientId, first_name: walkInForm.first_name, last_name: walkInForm.last_name, phone: walkInForm.phone, registration_paid: true, registered_at: new Date().toISOString() }])
       
-      // ✅ Register walk-in: sent to Lab AND Cashier, but lab_paid is FALSE (so it goes to Pending)
       const { data: consultData } = await supabase.from('consultations').insert([{ 
         patient_id: newPatientId, 
         prescription: `Walk-in / External Referral for Lab Services`, 
@@ -120,12 +131,17 @@ export default function Lab() {
       
       setMessage(`✅ ${walkInForm.first_name} registered! Appearing in Pending list until Cashier payment.`)
       setShowWalkInModal(false); setWalkInForm({ first_name: '', last_name: '', phone: '', service_id: '', price: 0 })
-      fetchPendingWalkIns() // Refresh pending list immediately
+      fetchPendingWalkIns()
     } catch (err) { setMessage('❌ Error: ' + err.message) }
     setLoading(false)
   }
 
-  const filteredQueue = queue.filter(item => item.patient_id.toLowerCase().includes(searchQueue.toLowerCase()) || item.test_name.toLowerCase().includes(searchQueue.toLowerCase()))
+  const filteredQueue = queue.filter(item => 
+    item.patient_id.toLowerCase().includes(searchQueue.toLowerCase()) || 
+    item.patient_name.toLowerCase().includes(searchQueue.toLowerCase()) ||
+    item.test_name.toLowerCase().includes(searchQueue.toLowerCase())
+  )
+  
   const inputStyle = { width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box', marginBottom: '15px' }
   const labelStyle = { display: 'block', marginBottom: '5px', color: '#333', fontWeight: 'bold', fontSize: '14px' }
   const modalOverlay = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }
@@ -146,9 +162,11 @@ export default function Lab() {
             <div style={{ marginBottom: '20px', backgroundColor: '#fffbeb', padding: '15px', borderRadius: '8px', border: '1px solid #fde68a' }}>
               <h4 style={{ margin: '0 0 10px 0', color: '#92400e', fontSize: '14px' }}>⏳ Pending Walk-ins (Waiting for Cashier Payment)</h4>
               {pendingWalkIns.map(item => (
-                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #fcd34d' }}>
+                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #fcd34d' }}>
                   <div>
-                    <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{item.patient_id}</div>
+                    {/* 🚀 NAME AT THE VERY TOP */}
+                    <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#333', marginBottom: '4px' }}>{item.patient_name}</div>
+                    <div style={{ fontSize: '12px', color: '#666', marginBottom: '2px' }}>🆔 {item.patient_id}</div>
                     <div style={{ fontSize: '12px', color: '#dc2626', fontWeight: 'bold' }}>Due: GH₵ {Number(item.total_amount || item.lab_fee || 0).toFixed(2)}</div>
                   </div>
                   <span style={{ padding: '6px 12px', backgroundColor: '#f59e0b', color: 'white', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold' }}>Awaiting Payment</span>
@@ -157,12 +175,14 @@ export default function Lab() {
             </div>
           )}
 
-          <input type="text" placeholder="🔍 Search Patient ID..." value={searchQueue} onChange={(e) => setSearchQueue(e.target.value)} style={{ width: '100%', padding: '10px', border: '1px solid #e5e7eb', borderRadius: '6px', marginBottom: '15px', boxSizing: 'border-box' }} />
+          <input type="text" placeholder="🔍 Search Patient Name or ID..." value={searchQueue} onChange={(e) => setSearchQueue(e.target.value)} style={{ width: '100%', padding: '10px', border: '1px solid #e5e7eb', borderRadius: '6px', marginBottom: '15px', boxSizing: 'border-box' }} />
           
           {filteredQueue.length === 0 ? <p style={{textAlign: 'center', color: '#666'}}>No patients ready for testing.</p> : filteredQueue.map((item) => (
             <div key={item.id} onClick={() => handleSelect(item)} style={{ padding: '15px', marginBottom: '10px', backgroundColor: selected?.id === item.id ? '#eff6ff' : '#f9fafb', border: `1px solid ${selected?.id === item.id ? '#3b82f6' : '#e5e7eb'}`, borderRadius: '8px', cursor: 'pointer' }}>
-              <div style={{ fontWeight: 'bold', fontSize: '16px' }}>ID: {item.patient_id}</div>
-              <div style={{ fontSize: '13px', color: '#dc2626', fontWeight: '600', marginTop: '4px' }}>🧪 {item.test_name}</div>
+              {/* 🚀 NAME AT THE VERY TOP */}
+              <div style={{ fontWeight: 'bold', fontSize: '16px', color: '#333', marginBottom: '4px' }}>{item.patient_name}</div>
+              <div style={{ fontSize: '12px', color: '#666', marginBottom: '6px' }}>🆔 ID: {item.patient_id}</div>
+              <div style={{ fontSize: '13px', color: '#dc2626', fontWeight: '600' }}>🧪 {item.test_name}</div>
               <div style={{ fontSize: '12px', marginTop: '8px', color: '#16a34a', fontWeight: 'bold' }}>✅ PAID - Ready for Test</div>
             </div>
           ))}
